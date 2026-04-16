@@ -1,0 +1,33 @@
+import { Router } from "express";
+import {
+  banUser,
+  createAdmin,
+  deleteAdmin,
+  getUserDetails,
+  getUsers,
+  rejectUser,
+  resolveFraudAlert,
+  reviewClaim,
+  sendNotification,
+  suspendUser,
+  updateFeedbackStatus,
+  verifyUser
+} from "../controllers/adminController.js";
+import { requireAdmin, requireAuth } from "../middleware/authMiddleware.js";
+
+const router = Router();
+
+router.get("/users", requireAuth, requireAdmin, getUsers);
+router.get("/users/:userId", requireAuth, requireAdmin, getUserDetails);
+router.post("/create-admin", requireAuth, requireAdmin, createAdmin);
+router.post("/delete-admin", requireAuth, requireAdmin, deleteAdmin);
+router.post("/notifications", requireAuth, requireAdmin, sendNotification);
+router.post("/feedback/status", requireAuth, requireAdmin, updateFeedbackStatus);
+router.post("/claims/review", requireAuth, requireAdmin, reviewClaim);
+router.post("/fraud-alerts/resolve", requireAuth, requireAdmin, resolveFraudAlert);
+router.post("/verify", requireAuth, requireAdmin, verifyUser);
+router.post("/reject", requireAuth, requireAdmin, rejectUser);
+router.post("/suspend", requireAuth, requireAdmin, suspendUser);
+router.post("/ban", requireAuth, requireAdmin, banUser);
+
+export default router;
