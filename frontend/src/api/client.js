@@ -23,9 +23,13 @@ async function request(path, { token, body, method = "GET" } = {}) {
   return data;
 }
 
-export const api = {
-  get: (path, options = {}) => request(path, { ...options, method: "GET" }),
-  post: (path, body, options = {}) => request(path, { ...options, body, method: "POST" }),
-  put: (path, body, options = {}) => request(path, { ...options, body, method: "PUT" }),
-  delete: (path, body, options = {}) => request(path, { ...options, body, method: "DELETE" })
-};
+async function api(path, options = {}) {
+  return request(path, options);
+}
+
+api.get = (path, options = {}) => request(path, { ...options, method: "GET" });
+api.post = (path, body, options = {}) => request(path, { ...options, body, method: "POST" });
+api.put = (path, body, options = {}) => request(path, { ...options, body, method: "PUT" });
+api.delete = (path, body, options = {}) => request(path, { ...options, body, method: "DELETE" });
+
+export { api };
