@@ -23,7 +23,7 @@ export function ChatbotPanel() {
     <GlassCard>
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <p className="text-sm uppercase tracking-[0.3em] text-cyan">Gemini Chatbot</p>
+          <p className="text-sm uppercase tracking-[0.3em] text-cyan">TrustShield AI Chatbot</p>
           <h3 className="mt-2 text-xl font-bold text-white">Ask about claims or your risk score</h3>
         </div>
       </div>
@@ -33,7 +33,7 @@ export function ChatbotPanel() {
         onChange={(e) => setQuestion(e.target.value)}
       />
       <button className="mt-4 rounded-full bg-cyan px-5 py-3 font-semibold text-ink" onClick={ask} disabled={loading}>
-        {loading ? "Thinking..." : "Ask Gemini"}
+        {loading ? "Thinking..." : "Ask TrustShield AI"}
       </button>
       {answer && <p className="mt-4 rounded-3xl bg-white/5 p-4 leading-7 text-white/80">{answer}</p>}
     </GlassCard>

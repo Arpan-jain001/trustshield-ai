@@ -25,6 +25,9 @@ const AdminUserDetailPage = lazy(() => import("./pages/admin/AdminUserDetailPage
 const HelpCenterPage = lazy(() => import("./pages/HelpCenterPage"));
 const FeedbackPage = lazy(() => import("./pages/FeedbackPage"));
 const AdminModerationPage = lazy(() => import("./pages/admin/AdminModerationPage"));
+const PoliciesPage = lazy(() => import("./pages/dashboard/PoliciesPage"));
+const WithdrawalPage = lazy(() => import("./pages/dashboard/WithdrawalPage"));
+const AdminWithdrawalsPage = lazy(() => import("./pages/dashboard/AdminWithdrawalsPage"));
 
 export default function App() {
   return (
@@ -95,6 +98,30 @@ export default function App() {
           element={
             <ProtectedRoute>
               <NotificationsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/policies"
+          element={
+            <ProtectedRoute accountTypes={["WORKER"]}>
+              <PoliciesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/withdrawal"
+          element={
+            <ProtectedRoute accountTypes={["WORKER"]}>
+              <WithdrawalPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/withdrawals"
+          element={
+            <ProtectedRoute adminOnly>
+              <AdminWithdrawalsPage />
             </ProtectedRoute>
           }
         />

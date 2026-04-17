@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Area, AreaChart, CartesianGrid, Pie, PieChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   Activity,
@@ -21,6 +22,8 @@ import { ChatbotPanel } from "../../components/ChatbotPanel";
 import { Loader } from "../../components/Loader";
 import { withMinimumDelay } from "../../utils/withMinimumDelay";
 import { AccountStatusGate } from "../../components/AccountStatusGate";
+import { AnimatedNoticeDialog } from "../../components/AnimatedNoticeDialog";
+import { PreTriggerFraudDialog } from "../../components/PreTriggerFraudDialog";
 
 function Metric({ label, value, tone = "text-white", hint }) {
   return (
@@ -80,6 +83,7 @@ function getDecisionBand(score) {
 
 export default function UserDashboard() {
   const { token, user, setUser } = useAuth();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [signalForm, setSignalForm] = useState(scenarioPresets.trusted);
   const [error, setError] = useState("");
@@ -95,6 +99,40 @@ export default function UserDashboard() {
   const [selectedProductId, setSelectedProductId] = useState("");
   const [paymentConfig, setPaymentConfig] = useState(null);
   const [paymentLoadingClaimId, setPaymentLoadingClaimId] = useState("");
+  const [policyPromptOpen, setPolicyPromptOpen] = useState(false);
+  const [claimNotice, setClaimNotice] = useState(null);
+  const [preTriggerClaim, setPreTriggerClaim] = useState(null);
+  const [showPreTriggerDialog, setShowPreTriggerDialog] = useState(false);
+  const [lockTick, setLockTick] = useState(Date.now());
+
+  useEffect(() => {
+    if (!claimNotice?.lockUntil) {
+      return undefined;
+    }
+
+    setLockTick(Date.now());
+    const timer = window.setInterval(() => setLockTick(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [claimNotice?.lockUntil]);
+
+  const claimLockCountdown = useMemo(() => {
+    if (!claimNotice?.lockUntil) {
+      return null;
+    }
+
+    const lockUntil = new Date(claimNotice.lockUntil).getTime();
+    const remainingMs = Math.max(0, lockUntil - lockTick);
+    const totalSeconds = Math.ceil(remainingMs / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    return {
+      remainingMs,
+      label: `${hours > 0 ? `${hours}h ` : ""}${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`,
+      expired: remainingMs <= 0
+    };
+  }, [claimNotice?.lockUntil, lockTick]);
 
   async function load() {
     if (!token) return;
@@ -168,28 +206,74 @@ export default function UserDashboard() {
       setError("Admin approval is required before policy activation.");
       return;
     }
-    setPolicyLoading(true);
-    setError("");
-    setMessage("");
-    try {
-      const data = await withMinimumDelay(api("/policy/create", { method: "POST", token, body: selectedProductId ? { productId: selectedProductId } : {} }));
-      setMessage(data.message);
-      await load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setPolicyLoading(false);
-    }
+    navigate("/policies", { state: { autoOpenPurchase: true } });
   }
 
   async function triggerClaim() {
     if (!isApproved) {
-      setError("Admin approval is required before claim simulation.");
+      setError("Admin approval is required before claim actions.");
       return;
     }
+
+    // Check if location is captured
+    if (!liveCoordinates) {
+      setShowPreTriggerDialog(true);
+      setPreTriggerClaim(null);
+      setError("Location capture required");
+      return;
+    }
+
+    if (!hasActivePolicy) {
+      const policyMessage = "First, you need to buy your policy before triggering a claim.";
+      setPolicyPromptOpen(true);
+      setError(policyMessage);
+      return;
+    }
+
     setTriggerLoading(true);
     setError("");
     setMessage("");
+    
+    try {
+      const signalPayload = {
+        networkLatencyMs: signalForm.networkLatencyMs,
+        speedKph: signalForm.speedKph,
+        sensorMotion: signalForm.sensorMotion,
+        trafficContext: signalForm.trafficContext,
+        ...(liveCoordinates ? { gpsCoordinates: liveCoordinates } : {})
+      };
+      
+      // Pre-trigger call to get fraud analysis without creating claim
+      const preAnalysisData = await api("/claim/pre-trigger-analysis", { 
+        method: "POST", 
+        token, 
+        body: { signalPayload } 
+      });
+      
+      // Show pre-trigger dialog with fraud analysis
+      setPreTriggerClaim(preAnalysisData);
+      setShowPreTriggerDialog(true);
+      setTriggerLoading(false);
+    } catch (err) {
+      // If pre-analysis fails, show error but don't block - might not have endpoint
+      console.error("Pre-analysis error (non-blocking):", err);
+      // Proceed directly to claim creation
+      confirmClaimTrigger();
+    }
+  }
+
+  async function confirmClaimTrigger() {
+    if (!hasActivePolicy) {
+      const policyMessage = "First, you need to buy your policy before triggering a claim.";
+      setPolicyPromptOpen(true);
+      setError(policyMessage);
+      return;
+    }
+
+    setTriggerLoading(true);
+    setError("");
+    setMessage("");
+    
     try {
       const signalPayload = {
         networkLatencyMs: signalForm.networkLatencyMs,
@@ -202,13 +286,35 @@ export default function UserDashboard() {
       const payoutText = data.claim?.payout?.transactionId
         ? ` Txn ${data.claim.payout.transactionId} settled in ${data.claim.payout.processingSeconds || 0}s.`
         : "";
-      setMessage(`Claim simulation completed with ${data.claim.decision} status.${payoutText}`);
+      setMessage(`Claim submitted with ${data.claim.decision} status.${payoutText}`);
+      setClaimNotice({
+        title: "Claim submitted successfully",
+        description: `${data.claim.decisionReason || "Your claim moved through the trust pipeline."} Decision: ${data.claim.decision}. ${payoutText || "The system will keep the claim visible in your dashboard."}`.trim()
+      });
+      setShowPreTriggerDialog(false);
       await load();
       if (liveCoordinates) {
         await loadLiveContext(liveCoordinates);
       }
     } catch (err) {
-      setError(err.message);
+      if ((err.message || "").toLowerCase().includes("no active policy")) {
+        setPolicyPromptOpen(true);
+      }
+      if (err.code === "CLAIM_LOCKED_WINDOW" || err.httpStatus === 429) {
+        const lockUntil = err.lockUntil || new Date(Date.now() + (Number(err.remainingMinutes) || 300) * 60 * 1000).toISOString();
+        const remainingMinutes = Number(err.remainingMinutes) || 300;
+        const hours = Math.floor(remainingMinutes / 60);
+        const minutes = remainingMinutes % 60;
+        setClaimNotice({
+          title: "Claim trigger locked",
+          description: `Kindly wait for ${hours > 0 ? `${hours} hour${hours > 1 ? "s" : ""}` : ""}${hours > 0 && minutes > 0 ? " and " : ""}${minutes > 0 ? `${minutes} minute${minutes > 1 ? "s" : ""}` : ""} before triggering this same disruption again. The system keeps one trigger active per disruption window to prevent duplicate claims.`.trim(),
+          lockUntil
+        });
+        setShowPreTriggerDialog(false);
+        setError("");
+      } else {
+        setError(err.message);
+      }
     } finally {
       setTriggerLoading(false);
     }
@@ -348,6 +454,28 @@ export default function UserDashboard() {
     razorpay.open();
   }
 
+  async function requestManualReview(claimId) {
+    if (!claimId) return;
+
+    setError("");
+    setMessage("");
+
+    try {
+      const response = await api("/claim/manual-review", {
+        method: "POST",
+        token,
+        body: {
+          claimId,
+          reason: "Worker requested a manual review after the AI decision"
+        }
+      });
+      setMessage(response.message || "Manual review requested successfully.");
+      await load();
+    } catch (err) {
+      setError(err.message || "Unable to request manual review");
+    }
+  }
+
   const activePolicy = profile?.policy;
   const currentStatus = profile?.user?.status || user?.status || "PENDING_VERIFICATION";
   const isApproved = currentStatus === "ACTIVE";
@@ -361,10 +489,14 @@ export default function UserDashboard() {
     "Provider not assigned";
   const latestClaim = profile?.claims?.[0];
   const latestSnapshot = profile?.featureSnapshots?.[0];
+  const latestAlert = profile?.alerts?.[0];
   const latestSignal = latestClaim?.signalFusion || latestSnapshot?.derivedFeatures || {};
   const availableProducts = profile?.availableProducts || [];
   const selectedProduct = availableProducts.find((product) => product._id === selectedProductId) || availableProducts[0];
   const canUseRazorpayCheckout = Boolean(paymentConfig?.razorpay?.enabled && paymentConfig?.razorpay?.keyId);
+  const activePolicyPremium = activePolicy?.weeklyPremium ?? activePolicy?.monthlyPremium ?? 0;
+  const activePolicyCoverage = activePolicy?.coverageHours ?? activePolicy?.claimCoverage ?? 0;
+  const activePolicyTotal = activePolicy?.pricingBreakdown?.total ?? activePolicyPremium;
 
   const chartData = useMemo(
     () =>
@@ -383,6 +515,7 @@ export default function UserDashboard() {
     ],
     [profile]
   );
+  const pendingClaimCount = profile?.summary?.reviewClaims || 0;
 
   const payoutHistory = useMemo(
     () =>
@@ -425,13 +558,29 @@ export default function UserDashboard() {
   }, [latestClaim, latestSnapshot, profile?.graphEdges?.length]);
 
   const decisionBand = getDecisionBand(riskWorkbench.composite);
+  const getDecisionSourceLabel = (claim) => {
+    const source = claim?.decisionSource || "AUTO";
+    if (source === "MANUAL") return "Worker requested manual review";
+    if (source === "PROVIDER_REVIEW") return `Provider final decision${claim?.review?.reviewedBy?.name ? ` by ${claim.review.reviewedBy.name}` : ""}`;
+    if (source === "ADMIN_REVIEW") return `Admin final decision${claim?.review?.reviewedBy?.name ? ` by ${claim.review.reviewedBy.name}` : ""}`;
+    return "AI / automatic decision";
+  };
+
+  const getLifecycleLabel = (claim) => {
+    if (!claim) return "No claim created";
+    if (claim.payout?.status === "SUCCESS") return "Completed payout";
+    if (claim.review?.status === "PENDING" || claim.decision === "NEEDS_REVIEW") return "Waiting manual review";
+    if (claim.decision === "REJECTED") return "Rejected by risk/review";
+    if (claim.decision === "APPROVED") return "Approved, payout in progress";
+    return "Created";
+  };
 
   const pipelineStages = useMemo(
     () => [
       { title: "Ingestion", status: latestSnapshot ? "Active" : "Pending", detail: latestSnapshot ? `${latestSnapshot.source} snapshot captured` : "Run signal ingestion to populate the feature store" },
       { title: "Signal fusion", status: latestSignal.integrityScore >= 70 ? "Healthy" : latestSignal.integrityScore ? "Watch" : "Pending", detail: latestSignal.integrityScore ? `Integrity ${latestSignal.integrityScore} / Spoof risk ${latestSignal.spoofRisk || 0}` : "Waiting for verification signals" },
       { title: "Graph intelligence", status: (profile?.graphEdges?.length || 0) >= 3 ? "Active" : "Learning", detail: `${profile?.graphEdges?.length || 0} graph links available for cluster analysis` },
-      { title: "Decision", status: latestClaim?.decision || "Pending", detail: latestClaim?.decisionReason || "Create or simulate a claim to see routing output" }
+      { title: "Decision", status: latestClaim?.decision || "Pending", detail: latestClaim?.decisionReason || "Create or submit a claim to see routing output" }
     ],
     [latestSnapshot, latestSignal, profile?.graphEdges?.length, latestClaim]
   );
@@ -451,7 +600,7 @@ export default function UserDashboard() {
     { key: "trusted", title: "Trusted rider", text: "Balanced telemetry and normal route behavior for low-friction claim handling." },
     { key: "disruption", title: "Severe weather", text: "Lower speed, disrupted traffic, and moderate latency for realistic external disruption." },
     { key: "spoof", title: "GPS spoof pressure", text: "High speed, weak motion signal, and abnormal latency to stress the anti-spoofing layer." },
-    { key: "cluster", title: "Coordinated cluster", text: "Suspicious but plausible signals to simulate fraud-ring escalation and graph pressure." }
+    { key: "cluster", title: "Coordinated cluster", text: "Suspicious but plausible signals to test fraud-ring escalation and graph pressure." }
   ];
 
   return (
@@ -462,7 +611,7 @@ export default function UserDashboard() {
             <p className="text-sm uppercase tracking-[0.35em] text-cyan">Worker command center</p>
             <h1 className="mt-3 font-space text-4xl font-bold">{user?.name || "TrustShield AI"}</h1>
             <p className="mt-3 max-w-3xl text-white/70">
-              This workspace upgrades the worker dashboard into a live resilience console with policy control, signal ingestion, adversarial scenario simulation, composite risk scoring, and payout-ready claim intelligence.
+              This workspace upgrades the worker dashboard into a live resilience console with policy control, signal ingestion, claim routing, composite risk scoring, and payout-ready claim intelligence.
             </p>
           </div>
           <button className="inline-flex items-center gap-2 rounded-full border border-white/15 px-5 py-3 font-semibold text-white transition hover:border-cyan/30" onClick={load}>
@@ -488,7 +637,7 @@ export default function UserDashboard() {
                 <h2 className="mt-5 text-3xl font-bold">{statusContent[currentStatus]?.title || "Restricted access"}</h2>
                 <p className="mt-4 text-lg leading-8 text-white/72">{statusContent[currentStatus]?.detail}</p>
                 <p className="mt-4 text-sm text-white/55">
-                  Aap dashboard open kar sakte ho, lekin policy purchase, signal ingestion, claim simulation, aur full analytics admin approval ke baad hi unlock honge.
+                  Aap dashboard open kar sakte ho, lekin policy purchase, signal ingestion, claim actions, aur full analytics admin approval ke baad hi unlock honge.
                 </p>
               </div>
               <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-black/20 p-5">
@@ -511,6 +660,49 @@ export default function UserDashboard() {
             </div>
           </GlassCard>
         ) : null}
+
+        <AnimatedNoticeDialog
+          open={policyPromptOpen}
+          title="Buy your policy first"
+          description="You need an active policy before you can trigger a claim. Choose a tier, complete Razorpay payment, and then claim payouts will be available."
+          primaryLabel="Buy Policy Now"
+          secondaryLabel="Not now"
+          onPrimary={() => {
+            setPolicyPromptOpen(false);
+            navigate('/policies', { state: { autoOpenPurchase: true } });
+          }}
+          onSecondary={() => setPolicyPromptOpen(false)}
+          onClose={() => setPolicyPromptOpen(false)}
+        />
+
+        <AnimatedNoticeDialog
+          open={Boolean(claimNotice)}
+          title={claimNotice?.title || "Claim submitted successfully"}
+          description={
+            claimNotice?.lockUntil
+              ? `${claimNotice.description} ${claimLockCountdown ? `Live timer: ${claimLockCountdown.expired ? "Unlocked now" : claimLockCountdown.label}.` : ""}`.trim()
+              : claimNotice?.description || "Your claim has been processed and is visible in the dashboard."
+          }
+          primaryLabel={claimNotice?.lockUntil ? (claimLockCountdown?.expired ? "Try again now" : "Understood") : "View latest claim"}
+          onPrimary={() => {
+            setClaimNotice(null);
+            load();
+          }}
+          onClose={() => setClaimNotice(null)}
+        />
+
+        {showPreTriggerDialog && (
+          <PreTriggerFraudDialog
+            claim={preTriggerClaim}
+            hasLocation={Boolean(liveCoordinates)}
+            loading={triggerLoading}
+            onConfirm={() => confirmClaimTrigger()}
+            onCancel={() => {
+              setShowPreTriggerDialog(false);
+              setPreTriggerClaim(null);
+            }}
+          />
+        )}
 
         <div className="mb-6 grid gap-4 lg:grid-cols-4">
           <GlassCard className="bg-[linear-gradient(145deg,rgba(118,228,247,0.08),rgba(255,255,255,0.04))]">
@@ -567,24 +759,18 @@ export default function UserDashboard() {
           <GlassCard className="bg-[linear-gradient(145deg,rgba(181,245,200,0.08),rgba(255,255,255,0.04))]">
             <p className="text-sm uppercase tracking-[0.3em] text-mint">Latest decision</p>
             <h3 className="mt-3 text-2xl font-bold">{latestClaim?.decision || "No claim yet"}</h3>
-            <p className="mt-3 text-white/68">{latestClaim?.decisionReason || "Simulate or submit a claim to see routing output here."}</p>
-            {latestClaim?.payout?.status === "SUCCESS" ? (
+            <p className="mt-3 text-white/68">{latestClaim?.decisionReason || "Submit a claim to see routing output here."}</p>
+            {latestClaim?.payout?.status === "SUCCESS" || latestClaim?.payout?.status === "WITHDRAWN" ? (
               <div className="mt-4 space-y-2 rounded-3xl border border-mint/25 bg-mint/10 p-4 text-sm text-mint">
                 <p className="font-semibold">INR {latestClaim?.payout?.total || 0} credited</p>
                 <p>Txn {latestClaim?.payout?.transactionId || "N/A"} via {latestClaim?.payout?.gateway || "SIMULATOR"}</p>
                 <p>{latestClaim?.payout?.processingSeconds || 0}s payout {latestClaim?.payout?.processingSeconds <= 30 ? "(< 30s)" : ""}</p>
               </div>
             ) : null}
-            {latestClaim?.payout?.status === "PENDING" && latestClaim?.payout?.gateway === "RAZORPAY_TEST" && latestClaim?.payout?.orderId ? (
-              <div className="mt-4">
-                <button
-                  className="rounded-full bg-cyan px-4 py-2 text-sm font-semibold text-ink transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
-                  onClick={() => openRazorpayCheckout(latestClaim)}
-                  disabled={!canUseRazorpayCheckout || paymentLoadingClaimId === latestClaim._id}
-                >
-                  {paymentLoadingClaimId === latestClaim._id ? "Opening checkout..." : "Complete payout checkout"}
-                </button>
-                {!canUseRazorpayCheckout ? <p className="mt-2 text-xs text-sand">Razorpay config unavailable. Check server payment config.</p> : null}
+            {latestClaim?.payout?.status === "PENDING" ? (
+              <div className="mt-4 rounded-3xl border border-sand/25 bg-sand/10 p-4 text-sm text-sand">
+                <p className="font-semibold">Payout settlement is being processed</p>
+                <p className="mt-1">The insurer-approved payout is queued from provider liquidity to your account. No worker payment action is required.</p>
               </div>
             ) : null}
             <div className="mt-5 flex flex-wrap gap-2">
@@ -599,6 +785,18 @@ export default function UserDashboard() {
             <p className="mt-3 text-white/68">Shared device, IP, location-cluster, and claim-cluster edges feed the fraud-ring defense layer.</p>
             <div className="mt-5 rounded-3xl bg-white/5 p-4 text-sm text-white/70">Linked accounts: {latestClaim?.fraud?.linkedAccounts || 0} | Cluster risk: {riskWorkbench.rows[4].value}</div>
           </GlassCard>
+        </div>
+
+        <div className="mb-6 flex flex-wrap gap-3">
+          <Link className="rounded-full bg-cyan px-5 py-3 font-semibold text-ink transition hover:scale-[1.02]" to="/policies">
+            Open policy center
+          </Link>
+          <Link className="rounded-full border border-white/15 px-5 py-3 font-semibold text-white transition hover:border-cyan/30" to="/notifications">
+            View notifications
+          </Link>
+          <Link className="rounded-full border border-white/15 px-5 py-3 font-semibold text-white transition hover:border-cyan/30" to="/feedback">
+            Send feedback
+          </Link>
         </div>
 
         <div className="mb-6 grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
@@ -624,6 +822,11 @@ export default function UserDashboard() {
                 <p className="mt-3 text-sm leading-7 text-white/68">
                   Dusre insurers aapka dashboard, policy history, claim trail, ya fraud telemetry nahi dekh sakte. Yeh data isolation provider-linked ownership ke through enforce hota hai.
                 </p>
+              </div>
+              <div className="rounded-3xl bg-white/5 p-5 md:col-span-2">
+                <p className="text-sm uppercase tracking-[0.2em] text-white/50">Latest admin update</p>
+                <p className="mt-3 text-lg font-semibold text-sand">{latestAlert?.title || "No recent notification"}</p>
+                <p className="mt-2 text-sm leading-7 text-white/68">{latestAlert?.message || "Policy and claim alerts from admin or your provider appear here automatically."}</p>
               </div>
             </div>
           </GlassCard>
@@ -751,7 +954,7 @@ export default function UserDashboard() {
                   onClick={triggerClaim}
                   disabled={!isApproved}
                 >
-                  {isApproved ? "Simulate claim decision" : "Admin approval required"}
+                  {isApproved ? "Trigger claim" : "Admin approval required"}
                 </button>
               )}
             </div>
@@ -759,6 +962,22 @@ export default function UserDashboard() {
               <p className="text-sm uppercase tracking-[0.2em] text-white/50">Latest decision reason</p>
               <p className="mt-2 text-sm leading-7 text-white/68">{liveContext?.latestDecision?.reason || latestClaim?.decisionReason || "Latest decision details will appear here after claim submission."}</p>
             </div>
+            {latestClaim ? (
+              <div className="mt-4 rounded-3xl border border-white/10 bg-white/5 p-4 text-sm text-white/70">
+                <p className="uppercase tracking-[0.22em] text-white/50">Decision source</p>
+                <p className="mt-2 font-semibold text-white">{getDecisionSourceLabel(latestClaim)}</p>
+                {latestClaim.review?.requestedAt ? <p className="mt-2 text-white/55">Manual review requested at {new Date(latestClaim.review.requestedAt).toLocaleString()}</p> : null}
+                {latestClaim.review?.reviewedBy?.name ? <p className="mt-1 text-white/55">Final reviewer: {latestClaim.review.reviewedBy.name}</p> : null}
+              </div>
+            ) : null}
+            {latestClaim?.decisionSource === "AUTO" && latestClaim?.review?.status === "NOT_REQUIRED" ? (
+              <button
+                className="mt-4 rounded-full border border-coral/25 px-4 py-2 text-sm font-semibold text-coral transition hover:bg-coral/10"
+                onClick={() => requestManualReview(latestClaim._id)}
+              >
+                Request manual review
+              </button>
+            ) : null}
           </GlassCard>
         </div>
 
@@ -766,10 +985,10 @@ export default function UserDashboard() {
           <GlassCard className="bg-[linear-gradient(145deg,rgba(255,148,120,0.08),rgba(255,255,255,0.04))]">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <p className="text-sm uppercase tracking-[0.3em] text-coral">Adversarial simulator</p>
+                <p className="text-sm uppercase tracking-[0.3em] text-coral">Live claim inputs</p>
                 <h3 className="mt-3 text-2xl font-bold">Model normal, disrupted, spoofed, or coordinated worker telemetry</h3>
                 <p className="mt-3 max-w-3xl text-white/68">
-                  These presets let you stress-test the ingestion and claim pipeline without changing backend contracts. Pick a scenario, then ingest signals, queue the stream event, or simulate a full claim.
+                  These presets let you exercise the ingestion and claim pipeline without changing backend contracts. Pick a scenario, then ingest signals, queue the stream event, or trigger a full claim.
                 </p>
               </div>
               {signalLoading || queueLoading ? <Loader label={signalLoading ? "Ingesting live signals..." : "Queueing stream event..."} /> : null}
@@ -829,6 +1048,7 @@ export default function UserDashboard() {
               >
                 {isApproved ? "Run full claim path" : "Admin approval required"}
               </button>
+              <span className="rounded-full bg-white/10 px-4 py-2 text-sm text-white/70">{profile?.alerts?.length || 0} alerts</span>
             </div>
           </GlassCard>
         </div>
@@ -836,7 +1056,7 @@ export default function UserDashboard() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Metric label="Account status" value={profile?.user?.status || user?.status || "-"} tone={user?.status === "ACTIVE" ? "text-mint" : "text-sand"} hint="Controlled by verification workflow" />
           <Metric label="AI risk score" value={profile?.user?.riskProfile?.score ?? latestClaim?.aiRisk?.score ?? 0} tone="text-cyan" hint="Dynamic risk profile for worker trust" />
-          <Metric label="Weekly premium" value={`INR ${activePolicy?.weeklyPremium || 0}`} tone="text-sand" hint="Fetched from active policy record" />
+          <Metric label="Weekly premium" value={`INR ${activePolicyPremium}`} tone="text-sand" hint="Fetched from active policy record" />
           <Metric label="Signal integrity" value={latestSignal.integrityScore ?? 0} tone="text-mint" hint="Latest signal-fusion confidence score" />
         </div>
 
@@ -905,12 +1125,12 @@ export default function UserDashboard() {
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               <div className="rounded-3xl bg-white/5 p-5">
                 <p className="text-sm text-white/50">Current pricing breakdown</p>
-                <p className="mt-4">Base: INR {activePolicy?.pricingBreakdown?.base || 0}</p>
-                <p>Risk: INR {activePolicy?.pricingBreakdown?.risk || 0}</p>
-                <p>Discount: INR {activePolicy?.pricingBreakdown?.discount || 0}</p>
-                <p className="mt-2 font-bold">Total: INR {activePolicy?.pricingBreakdown?.total || 0}</p>
+                <p className="mt-4">Base: INR {activePolicy?.pricingBreakdown?.base ?? activePolicyPremium ?? 0}</p>
+                <p>Risk: INR {activePolicy?.pricingBreakdown?.risk ?? activePolicy?.riskScore ?? 0}</p>
+                <p>Discount: INR {activePolicy?.pricingBreakdown?.discount ?? 0}</p>
+                <p className="mt-2 font-bold">Total: INR {activePolicyTotal}</p>
                 <p className="mt-3 text-sm text-white/55">
-                  Coverage hours: {activePolicy?.coverageHours || 0} | Ends: {activePolicy?.endsAt ? new Date(activePolicy.endsAt).toLocaleString() : "No active policy"}
+                  Coverage: {activePolicyCoverage} | Ends: {activePolicy?.endsAt ? new Date(activePolicy.endsAt).toLocaleString() : "No active policy"}
                 </p>
                 <p className="mt-2 text-sm text-white/60">Issued by: {issuingProviderName}</p>
                 {activePolicy?.riskInputs ? (
@@ -964,19 +1184,27 @@ export default function UserDashboard() {
                   <p className="mt-3 text-sm text-white/70">
                     Fraud score: {claim.fraud?.score} | AI risk: {claim.aiRisk?.score} | Hours lost: {claim.payout?.hoursLost || 0} | Payout: INR {claim.payout?.total}
                   </p>
-                  {claim.payout?.status === "SUCCESS" ? (
+                  <p className="mt-2 text-xs uppercase tracking-[0.2em] text-white/50">{getDecisionSourceLabel(claim)}</p>
+                  <p className="mt-2 text-xs uppercase tracking-[0.2em] text-white/45">Lifecycle: {getLifecycleLabel(claim)}</p>
+                  {claim.review?.requestedAt ? <p className="mt-2 text-sm text-sand">Manual review requested {new Date(claim.review.requestedAt).toLocaleString()}</p> : null}
+                  {claim.review?.reviewedBy?.name ? <p className="mt-1 text-sm text-white/60">Final reviewer: {claim.review.reviewedBy.name}</p> : null}
+                  {claim.payout?.status === "SUCCESS" || claim.payout?.status === "WITHDRAWN" ? (
                     <p className="mt-2 text-sm text-mint">
                       Payout {claim.payout.processingSeconds || 0}s | Txn {claim.payout.transactionId || "N/A"} | {claim.payout.gateway || "SIMULATOR"}
                     </p>
                   ) : null}
-                  {claim.payout?.status === "PENDING" && claim.payout?.gateway === "RAZORPAY_TEST" && claim.payout?.orderId ? (
+                  {claim.payout?.status === "PENDING" ? (
+                    <p className="mt-3 rounded-2xl border border-sand/20 bg-sand/10 px-4 py-2 text-sm text-sand">
+                      Settlement queued from insurer liquidity. This is an automatic insurance payout, not a worker payment action.
+                    </p>
+                  ) : null}
+                  {claim?.decisionSource === "AUTO" && claim?.review?.status === "NOT_REQUIRED" ? (
                     <div className="mt-3">
                       <button
-                        className="rounded-full border border-cyan/25 bg-cyan/10 px-4 py-2 text-sm font-semibold text-cyan transition hover:border-cyan/35 disabled:cursor-not-allowed disabled:opacity-60"
-                        onClick={() => openRazorpayCheckout(claim)}
-                        disabled={!canUseRazorpayCheckout || paymentLoadingClaimId === claim._id}
+                        className="rounded-full border border-coral/25 px-4 py-2 text-sm font-semibold text-coral transition hover:bg-coral/10"
+                        onClick={() => requestManualReview(claim._id)}
                       >
-                        {paymentLoadingClaimId === claim._id ? "Opening checkout..." : "Pay with Razorpay"}
+                        Escalate to manual review
                       </button>
                     </div>
                   ) : null}
@@ -999,6 +1227,7 @@ export default function UserDashboard() {
           <div className="space-y-6">
             <GlassCard>
               <h2 className="text-2xl font-bold">Claim outcome distribution</h2>
+              <p className="mt-2 text-xs uppercase tracking-[0.2em] text-sand">Pending claims: {pendingClaimCount}</p>
               <div className="mt-5 h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -1034,7 +1263,7 @@ export default function UserDashboard() {
 
             <GlassCard className="bg-[linear-gradient(145deg,rgba(181,245,200,0.08),rgba(255,255,255,0.04))]">
               <h2 className="text-2xl font-bold">Payout history</h2>
-              <p className="mt-2 text-sm text-white/60">Worker settlement trail with transaction metadata for demo and audit proof.</p>
+                <p className="mt-2 text-sm text-white/60">Worker settlement trail with transaction metadata for audit proof.</p>
               <div className="mt-5 space-y-3">
                 {payoutHistory.length ? (
                   payoutHistory.map((item) => (
@@ -1044,23 +1273,13 @@ export default function UserDashboard() {
                         <span className="rounded-full bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-white/70">{item.status}</span>
                       </div>
                       <p className="mt-2 text-sm text-mint">Txn {item.transactionId} | {item.gateway} | {item.seconds}s</p>
-                      {item.status === "PENDING" && item.gateway === "RAZORPAY_TEST" && item.orderId !== "N/A" ? (
-                        <div className="mt-3">
-                          <button
-                            className="rounded-full border border-cyan/25 bg-cyan/10 px-4 py-2 text-sm font-semibold text-cyan transition hover:border-cyan/35 disabled:cursor-not-allowed disabled:opacity-60"
-                            onClick={() => {
-                              const claim = (profile?.claims || []).find((entry) => entry._id === item.id);
-                              if (claim) {
-                                openRazorpayCheckout(claim);
-                              }
-                            }}
-                            disabled={!canUseRazorpayCheckout || paymentLoadingClaimId === item.id}
-                          >
-                            {paymentLoadingClaimId === item.id ? "Opening checkout..." : "Complete payment"}
-                          </button>
-                        </div>
+                      {item.status === "PENDING" ? (
+                        <p className="mt-3 rounded-2xl border border-sand/20 bg-sand/10 px-4 py-2 text-sm text-sand">
+                          Settlement queued from insurer liquidity. No further worker action is required.
+                        </p>
                       ) : null}
                       <p className="mt-2 text-sm text-white/60">Processed {new Date(item.processedAt).toLocaleString()} | Decision {item.decision}</p>
+                      <p className="mt-2 text-xs uppercase tracking-[0.2em] text-white/45">Lifecycle: {getLifecycleLabel((profile?.claims || []).find((entry) => entry._id === item.id))}</p>
                       <p className="mt-2 text-sm text-white/50">{item.decisionReason}</p>
                     </div>
                   ))

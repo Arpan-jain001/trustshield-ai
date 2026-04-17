@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, RadarChart, PolarGrid, PolarAngleAxis, Radar, LineChart, Line } from "recharts";
-import { RefreshCcw } from "lucide-react";
+import { RefreshCcw, Trash2 } from "lucide-react";
 import { api } from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import { AppShell } from "../../layouts/AppShell";
@@ -241,6 +241,43 @@ export default function AdminDashboard() {
     }
   }
 
+  async function handleDeleteFeedback(feedbackId) {
+    setAdminError("");
+    setAdminMessage("");
+    setFeedbackLoadingMap((current) => ({ ...current, [feedbackId]: true }));
+    try {
+      const response = await withMinimumDelay(
+        api(`/admin/feedback/${feedbackId}`, {
+          method: "DELETE",
+          token
+        })
+      );
+      setAdminMessage(response.message);
+      await load();
+    } catch (error) {
+      setAdminError(error.message || "Unable to delete feedback");
+    } finally {
+      setFeedbackLoadingMap((current) => ({ ...current, [feedbackId]: false }));
+    }
+  }
+
+  async function handleDeleteNotification(notificationId) {
+    setAdminError("");
+    setAdminMessage("");
+    try {
+      const response = await withMinimumDelay(
+        api(`/user/notifications/${notificationId}`, {
+          method: "DELETE",
+          token
+        })
+      );
+      setAdminMessage(response.message);
+      await load();
+    } catch (error) {
+      setAdminError(error.message || "Unable to delete notification");
+    }
+  }
+
   const chartData = useMemo(
     () => data?.stats?.map((item) => ({ name: item._id, value: item.total })) || [],
     [data]
@@ -292,6 +329,15 @@ export default function AdminDashboard() {
         .slice(0, 10),
     [data]
   );
+
+  const getLifecycleLabel = (claim) => {
+    if (!claim) return "No claim";
+    if (claim.payout?.status === "SUCCESS") return "Completed payout";
+    if (claim.review?.status === "PENDING" || claim.decision === "NEEDS_REVIEW") return "Waiting manual review";
+    if (claim.decision === "REJECTED") return "Rejected";
+    if (claim.decision === "APPROVED") return "Approved";
+    return "Created";
+  };
 
   return (
     <AppShell>
@@ -573,6 +619,13 @@ export default function AdminDashboard() {
                   <p className="mt-2 text-xs text-white/45">
                     Severity: {notification.severity} | Email: {notification.emailSent ? "Sent" : "In-app only"}
                   </p>
+                    <button
+                      className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-xs uppercase tracking-[0.18em] text-white/70 transition hover:border-coral/30 hover:text-coral"
+                      onClick={() => handleDeleteNotification(notification._id)}
+                    >
+                      <Trash2 size={12} />
+                      Delete notification
+                    </button>
                 </div>
               ))}
             </div>
@@ -611,6 +664,9 @@ export default function AdminDashboard() {
                       <button className="rounded-full bg-mint px-4 py-2 font-semibold text-ink transition hover:scale-[1.02]" onClick={() => handleFeedbackStatus(item._id, "RESOLVED")}>
                         Resolve feedback
                       </button>
+                      <button className="rounded-full border border-coral/30 px-4 py-2 text-coral transition hover:bg-coral/10" onClick={() => handleDeleteFeedback(item._id)}>
+                        Delete permanently
+                      </button>
                     </div>
                   )}
                 </div>
@@ -619,14 +675,16 @@ export default function AdminDashboard() {
           </GlassCard>
           <GlassCard>
             <h2 className="text-2xl font-bold">Recent claim decisions</h2>
+            <p className="mt-2 text-xs uppercase tracking-[0.2em] text-sand">Pending claims: {data?.reviewClaims?.length || 0}</p>
             <div className="mt-6 h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data?.claims?.map((claim) => ({ name: claim.user?.name || "User", payout: claim.payout?.total || 0, fraud: claim.fraud?.score || 0 })) || []}>
+                <BarChart data={data?.claims?.map((claim) => ({ name: claim.user?.name || "User", payout: claim.payout?.total || 0, fraud: claim.fraud?.score || 0, pending: claim.decision === "NEEDS_REVIEW" ? 1 : 0 })) || []}>
                   <XAxis dataKey="name" stroke="#d4e8ff" />
                   <YAxis stroke="#d4e8ff" />
                   <Tooltip />
                   <Bar dataKey="payout" fill="#76e4f7" radius={[10, 10, 0, 0]} />
                   <Bar dataKey="fraud" fill="#ff9478" radius={[10, 10, 0, 0]} />
+                  <Bar dataKey="pending" fill="#ffd7a8" radius={[10, 10, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -645,7 +703,7 @@ export default function AdminDashboard() {
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs uppercase tracking-[0.2em]">
                     <span className="rounded-full border border-cyan/20 bg-cyan/10 px-3 py-1 text-cyan">
-                      Provider: {claim.disruptionData?.source || "N/A"}
+                      Provider: {claim.provider?.organizationName || claim.provider?.name || claim.providerName || "N/A"}
                     </span>
                     <span className="rounded-full border border-coral/20 bg-coral/10 px-3 py-1 text-coral">
                       IP threat: {claim.signalFusion?.details?.ipThreatScore ?? 0}
@@ -656,6 +714,9 @@ export default function AdminDashboard() {
                   </div>
                   {claim.signalFusion?.flags?.length ? <p className="mt-2 text-sm text-white/50">{claim.signalFusion.flags.join(", ")}</p> : null}
                   <p className="mt-2 text-sm text-white/60">{claim.decisionReason}</p>
+                  <p className="mt-2 text-xs uppercase tracking-[0.2em] text-white/45">Source: {claim.decisionSource || "AUTO"}</p>
+                  <p className="mt-2 text-xs uppercase tracking-[0.2em] text-white/45">Lifecycle: {getLifecycleLabel(claim)}</p>
+                  <p className="mt-2 text-xs uppercase tracking-[0.2em] text-white/45">Requested by: {claim.review?.requestedBy?.name || "N/A"}</p>
                   <textarea
                     className="field mt-3 min-h-24"
                     placeholder="Review note"
@@ -730,8 +791,16 @@ export default function AdminDashboard() {
                       <span className="rounded-full bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-white/70">{claim.payout?.status || claim.decision}</span>
                     </div>
                     <p className="mt-2 text-sm text-mint">INR {claim.payout?.total || 0} | Txn {claim.payout?.transactionId || "N/A"} | {claim.payout?.gateway || "SIMULATOR"}</p>
+                    <p className="mt-2 text-xs uppercase tracking-[0.2em] text-white/45">Source: {claim.decisionSource || "AUTO"}</p>
+                    <p className="mt-2 text-xs uppercase tracking-[0.2em] text-white/45">Payout source: {claim.payout?.payoutSource || "N/A"}</p>
+                    <p className="mt-2 text-xs uppercase tracking-[0.2em] text-white/45">Lifecycle: {getLifecycleLabel(claim)}</p>
                     <p className="mt-2 text-sm text-white/60">Processed {claim.payout?.processedAt ? new Date(claim.payout.processedAt).toLocaleString() : "N/A"} | {claim.payout?.processingSeconds || 0}s</p>
                     <p className="mt-2 text-sm text-white/50">{claim.decisionReason || "No decision reason available"}</p>
+                    {claim.user?._id ? (
+                      <Link className="mt-3 inline-flex rounded-full border border-cyan/20 bg-cyan/10 px-4 py-2 text-xs uppercase tracking-[0.18em] text-cyan transition hover:border-cyan/30" to={`/admin/users/${claim.user._id}`}>
+                        Open worker detail
+                      </Link>
+                    ) : null}
                   </div>
                 ))
               ) : (

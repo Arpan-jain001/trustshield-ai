@@ -26,15 +26,43 @@ const statusContent = {
     title: "Account approved",
     tone: "text-mint",
     detail: "Full dashboard access is unlocked."
+  },
+  NO_ACTIVE_POLICY: {
+    title: "No active policy",
+    tone: "text-sand",
+    detail: "You need to purchase a protection policy to access the dashboard and file claims."
   }
 };
 
-export function AccountStatusGate({ user, label = "Account status", supportText }) {
+export function AccountStatusGate({ user, label = "Account status", supportText, hasActivePolicy = true }) {
   const currentStatus = user?.status || "PENDING_VERIFICATION";
+  
+  // Check policy status
+  if (currentStatus === "ACTIVE" && !hasActivePolicy) {
+    const content = statusContent.NO_ACTIVE_POLICY;
+    return (
+      <GlassCard className="mb-6 bg-[linear-gradient(145deg,rgba(255,215,168,0.08),rgba(255,148,120,0.08),rgba(255,255,255,0.04))]">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-3xl">
+            <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-2">
+              <ShieldAlert size={18} className={content.tone} />
+              <span className="text-sm uppercase tracking-[0.24em] text-white/70">Policy Required</span>
+            </div>
+            <h2 className="mt-5 text-3xl font-bold">{content.title}</h2>
+            <p className="mt-4 text-lg leading-8 text-white/72">{content.detail}</p>
+            <p className="mt-4 text-sm text-white/55">
+              Choose a protection plan that suits your needs and proceed to payment to unlock full access.
+            </p>
+          </div>
+        </div>
+      </GlassCard>
+    );
+  }
+
   const content = statusContent[currentStatus] || statusContent.PENDING_VERIFICATION;
   const detail = user?.statusReason || content.detail;
 
-  if (currentStatus === "ACTIVE") {
+  if (currentStatus === "ACTIVE" && hasActivePolicy) {
     return null;
   }
 

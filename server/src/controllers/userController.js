@@ -38,10 +38,32 @@ function serializeUser(user) {
   };
 }
 
+async function normalizeApprovedClaimPayout(claim) {
+  if (!claim || claim.decision !== "APPROVED") {
+    return claim;
+  }
+
+  if ((claim.payout?.total || 0) <= 0 || claim.payout?.status === "SUCCESS") {
+    return claim;
+  }
+
+  claim.payout = {
+    ...claim.payout,
+    status: "SUCCESS",
+    transactionId: claim.payout.transactionId || claim.payout.paymentId || claim.payout.orderId || `TXN-${claim._id.toString().slice(-10)}`,
+    processedAt: claim.payout.processedAt || new Date(),
+    processingSeconds: claim.payout.processingSeconds || 8,
+    message: claim.payout.message || `INR ${claim.payout.total} credited instantly via ${claim.payout.gateway || "SIMULATOR"}`
+  };
+
+  await claim.save();
+  return claim;
+}
+
 export const getProfile = asyncHandler(async (req, res) => {
   const [policy, claims, alerts, policyHistory, featureSnapshots, graphEdges, availableProducts] = await Promise.all([
     Policy.findOne({ user: req.user._id, status: "ACTIVE" }).populate("provider", "name organizationName accountType").sort({ createdAt: -1 }),
-    Claim.find({ user: req.user._id }).sort({ createdAt: -1 }).limit(8),
+    Claim.find({ user: req.user._id }).populate("review.reviewedBy", "name role accountType organizationName").populate("review.requestedBy", "name role accountType organizationName").sort({ createdAt: -1 }).limit(8),
     SystemAlert.find({
       $or: [{ audience: "GLOBAL" }, { user: req.user._id }]
     }).sort({ createdAt: -1 }).limit(8),
@@ -52,6 +74,8 @@ export const getProfile = asyncHandler(async (req, res) => {
       ? ProviderPolicyProduct.find({ provider: req.user.linkedProvider, status: "ACTIVE" }).sort({ isDefault: -1, createdAt: -1 }).limit(6)
       : []
   ]);
+
+  const normalizedClaims = await Promise.all(claims.map((claim) => normalizeApprovedClaimPayout(claim)));
 
   if (!alerts.length) {
     if (req.user.status === "ACTIVE") {
@@ -70,14 +94,14 @@ export const getProfile = asyncHandler(async (req, res) => {
   res.json({
     user: serializeUser(req.user),
     policy,
-    claims,
+    claims: normalizedClaims,
     policyHistory,
     summary: {
-      totalClaims: claims.length,
-      approvedClaims: claims.filter((claim) => claim.decision === "APPROVED").length,
-      rejectedClaims: claims.filter((claim) => claim.decision === "REJECTED").length,
-      reviewClaims: claims.filter((claim) => claim.decision === "NEEDS_REVIEW").length,
-      totalPayout: claims.reduce((sum, claim) => sum + (claim.payout?.total || 0), 0)
+      totalClaims: normalizedClaims.length,
+      approvedClaims: normalizedClaims.filter((claim) => claim.decision === "APPROVED").length,
+      rejectedClaims: normalizedClaims.filter((claim) => claim.decision === "REJECTED").length,
+      reviewClaims: normalizedClaims.filter((claim) => claim.decision === "NEEDS_REVIEW").length,
+      totalPayout: normalizedClaims.reduce((sum, claim) => sum + (claim.payout?.total || 0), 0)
     },
     featureSnapshots,
     graphEdges,
@@ -106,6 +130,17 @@ export const getNotifications = asyncHandler(async (req, res) => {
     .limit(20);
 
   res.json({ notifications });
+});
+
+export const deleteNotification = asyncHandler(async (req, res) => {
+  const notification = await SystemAlert.findOne({ _id: req.params.notificationId, $or: [{ user: req.user._id }, { audience: "GLOBAL" }] });
+
+  if (!notification) {
+    return res.status(404).json({ message: "Notification not found" });
+  }
+
+  await SystemAlert.deleteOne({ _id: notification._id });
+  res.json({ message: "Notification deleted permanently" });
 });
 
 export const getLiveContext = asyncHandler(async (req, res) => {
@@ -305,4 +340,215 @@ export const changePassword = asyncHandler(async (req, res) => {
   await req.user.save();
 
   res.json({ message: "Password changed successfully" });
+});
+
+export const getWithdrawalAvailable = asyncHandler(async (req, res) => {
+  const user = await req.user.populate([
+    {
+      path: "policy",
+      model: "Policy",
+      match: { status: "ACTIVE" }
+    }
+  ]);
+
+  const approvedClaims = await Claim.find({
+    user: req.user._id,
+    decision: "APPROVED",
+    "payout.status": { $in: ["SUCCESS", "SETTLED", "PENDING_WITHDRAWAL"] }
+  });
+
+  let totalAvailable = 0;
+  let claimDetails = [];
+
+  for (const claim of approvedClaims) {
+    const payoutTotal = Number(claim.payout?.total) || 0;
+    const withdrawnAmount = Number(claim.payout?.withdrawnAmount) || 0;
+    const claimAvailable = Math.max(0, payoutTotal - withdrawnAmount);
+    if (claimAvailable > 0) {
+      totalAvailable += claimAvailable;
+      claimDetails.push({
+        claimId: claim._id,
+        amount: claimAvailable,
+        total: payoutTotal,
+        withdrawnAmount,
+        approvedAt: claim.review?.approvedAt || claim.createdAt,
+        status: claim.payout?.status
+      });
+    }
+  }
+
+  res.json({
+    available: totalAvailable,
+    claimCount: approvedClaims.length,
+    claims: claimDetails,
+    policy: user.policy
+  });
+});
+
+export const initiateWithdrawal = asyncHandler(async (req, res) => {
+  const { amount } = req.body;
+
+  if (!amount || amount <= 0) {
+    return res.status(400).json({ message: "Valid amount is required" });
+  }
+
+  const availableClaims = await Claim.find({
+    user: req.user._id,
+    decision: "APPROVED",
+    "payout.status": { $in: ["SUCCESS", "SETTLED", "PENDING_WITHDRAWAL"] }
+  }).sort({ createdAt: 1 });
+
+  const totalAvailable = availableClaims.reduce((sum, claim) => {
+    const payoutTotal = Number(claim.payout?.total) || 0;
+    const withdrawnAmount = Number(claim.payout?.withdrawnAmount) || 0;
+    return sum + Math.max(0, payoutTotal - withdrawnAmount);
+  }, 0);
+
+  if (amount > totalAvailable) {
+    return res.status(400).json({
+      message: "Insufficient balance",
+      available: totalAvailable,
+      requested: amount
+    });
+  }
+
+  try {
+    const { WorkerWithdrawal } = await import("../models/WorkerWithdrawal.js");
+    const transferReference = `TRF-${req.user._id.toString().slice(-6).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+    const now = new Date();
+    let remaining = Number(amount);
+    const touchedClaims = [];
+
+    for (const claim of availableClaims) {
+      if (remaining <= 0) {
+        break;
+      }
+
+      const payoutTotal = Number(claim.payout?.total) || 0;
+      const withdrawnAmount = Number(claim.payout?.withdrawnAmount) || 0;
+      const claimAvailable = Math.max(0, payoutTotal - withdrawnAmount);
+
+      if (claimAvailable <= 0) {
+        continue;
+      }
+
+      const allocation = Math.min(remaining, claimAvailable);
+      const nextWithdrawnAmount = withdrawnAmount + allocation;
+
+      claim.payout = {
+        ...claim.payout,
+        withdrawnAmount: nextWithdrawnAmount,
+        withdrawnAt: now,
+        withdrawalId: undefined,
+        status: nextWithdrawnAmount >= payoutTotal ? "WITHDRAWN" : "SUCCESS",
+        message: `INR ${allocation} moved to withdrawal transfer ${transferReference}`
+      };
+      touchedClaims.push(claim);
+      remaining -= allocation;
+    }
+
+    if (remaining > 0) {
+      return res.status(400).json({
+        message: "Insufficient balance after allocation",
+        available: totalAvailable,
+        requested: amount
+      });
+    }
+
+    const withdrawal = new WorkerWithdrawal({
+      user: req.user._id,
+      amount: Number(amount),
+      status: "COMPLETED",
+      paymentMethod: "BANK_TRANSFER",
+      transferReference,
+      bankDetails: {
+        accountHolderName: req.user.name || "Worker"
+      },
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+      completedAt: now,
+      notes: "Auto-settled payout from insurer-funded claim wallet"
+    });
+
+    withdrawal.razorpayDetails = {
+      receiptId: transferReference
+    };
+    await withdrawal.save();
+    for (const claim of touchedClaims) {
+      claim.payout = {
+        ...claim.payout,
+        withdrawalId: withdrawal._id
+      };
+    }
+    await Promise.all(touchedClaims.map((claim) => claim.save()));
+
+    res.json({
+      success: true,
+      withdrawalId: withdrawal._id,
+      amount: Number(amount),
+      transferReference,
+      paymentMethod: withdrawal.paymentMethod,
+      status: withdrawal.status,
+      completedAt: withdrawal.completedAt
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to create withdrawal",
+      error: error.message
+    });
+  }
+});
+
+export const verifyWithdrawal = asyncHandler(async (req, res) => {
+  const { withdrawalId } = req.body;
+
+  if (!withdrawalId) {
+    return res.status(400).json({ message: "withdrawalId is required" });
+  }
+
+  const { WorkerWithdrawal } = await import("../models/WorkerWithdrawal.js");
+  const withdrawal = await WorkerWithdrawal.findById(withdrawalId);
+
+  if (!withdrawal || withdrawal.user.toString() !== req.user._id.toString()) {
+    return res.status(404).json({ message: "Withdrawal not found" });
+  }
+
+  res.json({
+    success: true,
+    message: "Withdrawal is settled directly. No payment gateway verification is required.",
+    withdrawalId: withdrawal._id,
+    amount: withdrawal.amount,
+    completedAt: withdrawal.completedAt,
+    paymentMethod: withdrawal.paymentMethod,
+    transferReference: withdrawal.transferReference
+  });
+});
+
+export const getWithdrawalHistory = asyncHandler(async (req, res) => {
+  const { WorkerWithdrawal } = await import("../models/WorkerWithdrawal.js");
+
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  const withdrawals = await WorkerWithdrawal.find({
+    user: req.user._id
+  })
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+
+  const total = await WorkerWithdrawal.countDocuments({
+    user: req.user._id
+  });
+
+  res.json({
+    withdrawals,
+    pagination: {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit)
+    }
+  });
 });

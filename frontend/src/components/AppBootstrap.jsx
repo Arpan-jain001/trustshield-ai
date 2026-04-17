@@ -3,10 +3,14 @@ import App from "../App";
 import { SplashScreen } from "./SplashScreen";
 import { useAuth } from "../context/AuthContext";
 
-const REMOTE_API_BASE = "https://trustshield-ai.onrender.com/api";
+import { frontendEnv } from "../config/env";
 
 function warmupRemoteApi() {
-  fetch(REMOTE_API_BASE, {
+  if (frontendEnv.apiBaseUrl === "/api") {
+    return;
+  }
+
+  fetch(frontendEnv.apiBaseUrl, {
     method: "GET",
     mode: "no-cors",
     cache: "no-store"

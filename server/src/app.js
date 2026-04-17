@@ -11,6 +11,7 @@ import opsRoutes from "./routes/opsRoutes.js";
 import feedbackRoutes from "./routes/feedbackRoutes.js";
 import providerRoutes from "./routes/providerRoutes.js";
 import platformRoutes from "./routes/platformRoutes.js";
+import orderRoutes from "./routes/orderRoutes.js";
 import { env } from "./config/env.js";
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
 import { observabilityMiddleware } from "./middleware/observabilityMiddleware.js";
@@ -54,6 +55,7 @@ app.use("/api/ops", opsRoutes);
 app.use("/api/feedback", feedbackRoutes);
 app.use("/api/provider", providerRoutes);
 app.use("/api/platform", platformRoutes);
+app.use("/api/orders", orderRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

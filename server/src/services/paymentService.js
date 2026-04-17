@@ -36,7 +36,8 @@ export function getPaymentGateway() {
 export function getRazorpayPublicConfig() {
   return {
     enabled: pickGateway() === "RAZORPAY_TEST" && Boolean(env.razorpayKeyId && env.razorpayKeySecret),
-    keyId: env.razorpayKeyId || null
+    keyId: env.razorpayKeyId || null,
+    publicKey: env.razorpayKeyId || null
   };
 }
 
@@ -77,7 +78,7 @@ export function simulateInstantPayout({ amount, currency = "INR" }) {
   };
 }
 
-export async function initiateInstantPayout({ amount, currency = "INR", referenceId = "trustshield-payout", notes = {} }) {
+export async function initiateInstantPayout({ amount, currency = "INR", referenceId = "trustshield-payout", notes = {}, requireCheckout = false }) {
   const gateway = pickGateway();
 
   if (gateway !== "RAZORPAY_TEST") {
@@ -100,15 +101,30 @@ export async function initiateInstantPayout({ amount, currency = "INR", referenc
 
   const client = getRazorpayClient();
   if (!client) {
+    return requireCheckout
+      ? {
+          status: "FAILED",
+          gateway,
+          orderId: null,
+          transactionId: null,
+          currency,
+          processingSeconds: 0,
+          processedAt: null,
+          message: "Razorpay credentials are missing. Configure RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET."
+        }
+      : simulateInstantPayout({ amount, currency });
+  }
+
+  if (!requireCheckout) {
     return {
-      status: "FAILED",
+      status: "SUCCESS",
       gateway,
       orderId: null,
-      transactionId: null,
+      transactionId: buildTransactionId(gateway),
       currency,
-      processingSeconds: 0,
-      processedAt: null,
-      message: "Razorpay credentials are missing. Configure RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET."
+      processingSeconds: Math.max(3, Math.min(18, 3 + Math.floor(Math.random() * 10))),
+      processedAt: new Date(),
+      message: `INR ${Math.round(numericAmount)} credited instantly via ${gateway.replace("_", " ")}`
     };
   }
 

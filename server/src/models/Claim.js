@@ -79,6 +79,11 @@ const claimSchema = new mongoose.Schema(
       enum: ["APPROVED", "REJECTED", "NEEDS_REVIEW"],
       default: "NEEDS_REVIEW"
     },
+    decisionSource: {
+      type: String,
+      enum: ["AUTO", "MANUAL", "PROVIDER_REVIEW", "ADMIN_REVIEW"],
+      default: "AUTO"
+    },
     decisionReason: String,
     review: {
       status: {
@@ -86,6 +91,11 @@ const claimSchema = new mongoose.Schema(
         enum: ["NOT_REQUIRED", "PENDING", "APPROVED", "REJECTED"],
         default: "NOT_REQUIRED"
       },
+      requestedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+      },
+      requestedAt: Date,
       notes: String,
       reviewedBy: {
         type: mongoose.Schema.Types.ObjectId,
@@ -97,10 +107,20 @@ const claimSchema = new mongoose.Schema(
       hoursLost: Number,
       hourlyRate: Number,
       total: Number,
+      payoutSource: String,
+      withdrawnAmount: {
+        type: Number,
+        default: 0
+      },
+      withdrawnAt: Date,
+      withdrawalId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "WorkerWithdrawal"
+      },
       processedAt: Date,
       status: {
         type: String,
-        enum: ["PENDING", "SUCCESS", "FAILED", "SKIPPED"],
+        enum: ["PENDING", "SUCCESS", "WITHDRAWN", "FAILED", "SKIPPED"],
         default: "PENDING"
       },
       gateway: String,

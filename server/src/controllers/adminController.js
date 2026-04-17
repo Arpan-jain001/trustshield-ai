@@ -6,6 +6,8 @@ import { SystemAlert } from "../models/SystemAlert.js";
 import { FeatureSnapshot } from "../models/FeatureSnapshot.js";
 import { FraudGraphEdge } from "../models/FraudGraphEdge.js";
 import { Feedback } from "../models/Feedback.js";
+import { ProviderProfile } from "../models/ProviderProfile.js";
+import { ProviderReserveLedger } from "../models/ProviderReserveLedger.js";
 import { env } from "../config/env.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { initiateInstantPayout } from "../services/paymentService.js";
@@ -69,7 +71,13 @@ export const getUsers = asyncHandler(async (req, res) => {
       { $group: { _id: "$status", total: { $sum: 1 } } }
     ]),
     FraudAlert.find({ status: "OPEN" }).populate("user claim").sort({ createdAt: -1 }),
-    Claim.find().populate("user review.reviewedBy").sort({ createdAt: -1 }).limit(12),
+    Claim.find()
+      .populate("user", "name email accountType")
+      .populate("provider", "name organizationName accountType")
+      .populate("review.reviewedBy", "name role accountType organizationName")
+      .populate("review.requestedBy", "name role accountType organizationName")
+      .sort({ createdAt: -1 })
+      .limit(12),
     SystemAlert.find().populate("user createdBy").sort({ createdAt: -1 }).limit(8),
     Feedback.find().populate("user reviewedBy").sort({ createdAt: -1 }).limit(8)
   ]);
@@ -334,13 +342,19 @@ export const reviewClaim = asyncHandler(async (req, res) => {
     reviewedAt: new Date()
   };
   claim.decision = action === "APPROVE" ? "APPROVED" : "REJECTED";
+  claim.decisionSource = "ADMIN_REVIEW";
   claim.decisionReason =
     action === "APPROVE"
       ? notes?.trim() || "Admin approved the claim after manual review."
       : notes?.trim() || "Admin rejected the claim after manual review.";
 
   if (action === "APPROVE") {
-    const payoutAmount = (claim.payout?.hoursLost || 0) * (claim.payout?.hourlyRate || claim.user?.hourlyRate || 0);
+    const payoutAmount = Math.max(
+      0,
+      Number(claim.payout?.total) ||
+        Number(claim.policy?.claimCoverage) ||
+        (Number(claim.payout?.hoursLost) || 0) * (Number(claim.payout?.hourlyRate) || Number(claim.user?.hourlyRate) || 0)
+    );
     const payoutResult = await initiateInstantPayout({
       amount: payoutAmount,
       referenceId: `admin-claim-${claim._id.toString().slice(-10)}`,
@@ -350,6 +364,23 @@ export const reviewClaim = asyncHandler(async (req, res) => {
         path: "ADMIN_REVIEW"
       }
     });
+    if (claim.provider && payoutAmount > 0) {
+      const providerProfile = await ProviderProfile.findOne({ user: claim.provider });
+      if (providerProfile) {
+        providerProfile.reservePool = Math.max(0, providerProfile.reservePool - payoutAmount);
+        providerProfile.availableLiquidity = Math.max(0, providerProfile.availableLiquidity - payoutAmount);
+        await providerProfile.save();
+
+        await ProviderReserveLedger.create({
+          provider: claim.provider,
+          entryType: "PAYOUT_SETTLED",
+          amount: payoutAmount,
+          note: `Admin approved claim ${claim._id}`,
+          balanceAfter: providerProfile.availableLiquidity,
+          createdBy: req.user._id
+        });
+      }
+    }
     claim.payout = {
       ...claim.payout,
       total: payoutAmount,
@@ -430,4 +461,147 @@ export const updateFeedbackStatus = asyncHandler(async (req, res) => {
   await feedback.save();
 
   res.json({ message: "Feedback status updated", feedback });
+});
+
+export const deleteFeedback = asyncHandler(async (req, res) => {
+  const { feedbackId } = req.params;
+
+  const feedback = await Feedback.findById(feedbackId);
+  if (!feedback) {
+    return res.status(404).json({ message: "Feedback not found" });
+  }
+
+  await Feedback.deleteOne({ _id: feedback._id });
+  res.json({ message: "Feedback deleted permanently" });
+});
+
+export const getAllWithdrawals = asyncHandler(async (req, res) => {
+  const { WorkerWithdrawal } = await import("../models/WorkerWithdrawal.js");
+
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const skip = (page - 1) * limit;
+  const status = req.query.status;
+  const userId = req.query.userId;
+
+  let query = {};
+  if (status) query.status = status;
+  if (userId) query.user = userId;
+
+  const withdrawals = await WorkerWithdrawal.find(query)
+    .populate("user", "name email mobileNumber accountType")
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+
+  const total = await WorkerWithdrawal.countDocuments(query);
+
+  res.json({
+    withdrawals,
+    pagination: {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit)
+    }
+  });
+});
+
+export const getWithdrawalStats = asyncHandler(async (req, res) => {
+  const { WorkerWithdrawal } = await import("../models/WorkerWithdrawal.js");
+
+  const stats = await WorkerWithdrawal.aggregate([
+    {
+      $facet: {
+        byStatus: [
+          {
+            $group: {
+              _id: "$status",
+              count: { $sum: 1 },
+              total: { $sum: "$amount" }
+            }
+          }
+        ],
+        overall: [
+          {
+            $group: {
+              _id: null,
+              totalWithdrawals: { $sum: 1 },
+              totalAmount: { $sum: "$amount" },
+              completedCount: {
+                $sum: { $cond: [{ $eq: ["$status", "COMPLETED"] }, 1, 0] }
+              },
+              completedAmount: {
+                $sum: {
+                  $cond: [{ $eq: ["$status", "COMPLETED"] }, "$amount", 0]
+                }
+              },
+              pendingCount: {
+                $sum: { $cond: [{ $eq: ["$status", "INITIATED"] }, 1, 0] }
+              },
+              failedCount: {
+                $sum: { $cond: [{ $eq: ["$status", "FAILED"] }, 1, 0] }
+              }
+            }
+          }
+        ],
+        recentTransactions: [
+          {
+            $sort: { createdAt: -1 }
+          },
+          {
+            $limit: 10
+          },
+          {
+            $lookup: {
+              from: "users",
+              localField: "user",
+              foreignField: "_id",
+              as: "userDetails"
+            }
+          },
+          {
+            $unwind: "$userDetails"
+          },
+          {
+            $project: {
+              _id: 1,
+              amount: 1,
+              status: 1,
+              createdAt: 1,
+              userName: "$userDetails.name",
+              userEmail: "$userDetails.email",
+              userPhone: "$userDetails.mobileNumber"
+            }
+          }
+        ]
+      }
+    }
+  ]);
+
+  const [byStatus] = stats[0].byStatus;
+  const [overall] = stats[0].overall;
+  const recentTransactions = stats[0].recentTransactions;
+
+  res.json({
+    overall,
+    byStatus,
+    recentTransactions
+  });
+});
+
+export const getWithdrawalDetails = asyncHandler(async (req, res) => {
+  const { withdrawalId } = req.params;
+  const { WorkerWithdrawal } = await import("../models/WorkerWithdrawal.js");
+
+  const withdrawal = await WorkerWithdrawal.findById(withdrawalId).populate(
+    "user",
+    "name email mobileNumber accountType organizationName"
+  );
+
+  if (!withdrawal) {
+    return res.status(404).json({ message: "Withdrawal not found" });
+  }
+
+  res.json(withdrawal);
 });

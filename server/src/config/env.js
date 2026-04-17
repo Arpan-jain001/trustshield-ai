@@ -37,6 +37,8 @@ if (process.env.NODE_ENV === "production" && !process.env.IPGEOLOCATION_API_KEY)
   configWarnings.push("IPGEOLOCATION_API_KEY is missing in production.");
 }
 
+const claimTriggerLockHours = Math.max(1, Number(process.env.CLAIM_TRIGGER_LOCK_HOURS) || 5);
+
 export const env = {
   port: process.env.PORT || 5000,
   nodeEnv: process.env.NODE_ENV || "development",
@@ -57,6 +59,7 @@ export const env = {
   paymentGateway: process.env.PAYMENT_GATEWAY,
   razorpayKeyId: process.env.RAZORPAY_KEY_ID,
   razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET,
+  claimTriggerLockHours,
   enableSchedulers: process.env.ENABLE_SCHEDULERS !== "false",
   configWarnings
 };

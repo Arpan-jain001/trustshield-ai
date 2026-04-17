@@ -6,6 +6,9 @@ export function errorHandler(err, req, res, next) {
   const statusCode = err.statusCode || 500;
   res.status(statusCode).json({
     message: err.message || "Server error",
-    details: err.details || null
+    code: err.code || null,
+    details: err.details || null,
+    lockUntil: err.lockUntil || null,
+    remainingMinutes: err.remainingMinutes || null
   });
 }

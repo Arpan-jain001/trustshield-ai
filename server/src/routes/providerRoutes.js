@@ -3,7 +3,10 @@ import {
   adjustProviderLiquidity,
   createProviderProduct,
   getProviderDashboard,
+  escalateProviderClaim,
   reviewProviderClaim,
+  initiateProviderLiquidityTopUp,
+  verifyProviderLiquidityTopUp,
   simulateProviderPricing,
   updateProviderProduct,
   updateProviderProfile
@@ -18,6 +21,9 @@ router.post("/simulate-pricing", requireAuth, requireAccountType("INSURER"), sim
 router.post("/products", requireAuth, requireAccountType("INSURER"), createProviderProduct);
 router.put("/products/:productId", requireAuth, requireAccountType("INSURER"), updateProviderProduct);
 router.post("/liquidity", requireAuth, requireAccountType("INSURER"), adjustProviderLiquidity);
+router.post("/liquidity/top-up", requireAuth, requireAccountType("INSURER"), initiateProviderLiquidityTopUp);
+router.post("/liquidity/top-up/verify", requireAuth, requireAccountType("INSURER"), verifyProviderLiquidityTopUp);
 router.post("/claims/review", requireAuth, requireAccountType("INSURER"), reviewProviderClaim);
+router.post("/claims/escalate", requireAuth, requireAccountType("INSURER"), escalateProviderClaim);
 
 export default router;

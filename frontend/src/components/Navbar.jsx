@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Bell, BookOpenText, LifeBuoy, Home, LogOut, Menu, MessageSquareHeart, Settings, Shield, ShieldCheck, Sparkles, Users, Workflow, X } from "lucide-react";
+import { Bell, BookOpenText, LifeBuoy, Home, LogOut, Menu, MessageSquareHeart, Settings, Shield, ShieldCheck, Sparkles, Users, Workflow, X, TrendingDown } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useEffect, useMemo, useState } from "react";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -18,6 +18,7 @@ export function Navbar() {
     home: "Home",
     dashboard: "Dashboard",
     notifications: "Notifications",
+    policies: "Policies",
     docs: "Docs",
     howItWorks: "How It Works",
     help: "Help Center",
@@ -38,6 +39,8 @@ export function Navbar() {
     (location.pathname.startsWith("/dashboard") ||
       location.pathname.startsWith("/admin") ||
       location.pathname.startsWith("/notifications") ||
+      location.pathname.startsWith("/policies") ||
+      location.pathname.startsWith("/withdrawal") ||
       location.pathname.startsWith("/settings") ||
       location.pathname.startsWith("/profile"));
 
@@ -62,6 +65,13 @@ export function Navbar() {
 
   const protectedLinks = [
     { label: copy.dashboard, to: dashboardTarget, icon: Users },
+    ...(user?.accountType === "WORKER" ? [
+      { label: copy.policies, to: "/policies", icon: ShieldCheck },
+      { label: "Withdrawals", to: "/withdrawal", icon: TrendingDown }
+    ] : []),
+    ...(user?.role === "ADMIN" ? [
+      { label: "Withdrawal Analytics", to: "/admin/withdrawals", icon: TrendingDown }
+    ] : []),
     { label: copy.notifications, to: "/notifications", icon: Bell, count: notificationCount },
     { label: copy.feedback, to: "/feedback", icon: MessageSquareHeart },
     { label: copy.settings, to: "/settings", icon: Settings }

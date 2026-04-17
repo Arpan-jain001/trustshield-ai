@@ -33,14 +33,14 @@ const copy = {
     {
       icon: Truck,
       title: "Worker dashboard",
-      text: "Workers sign up under a selected insurer/provider, buy weekly policies, ingest signals, simulate claims, and view claim, payout, fraud, and risk evidence.",
+      text: "Workers sign up under a selected insurer/provider, buy weekly policies, ingest signals, submit claims, and view claim, payout, fraud, and risk evidence.",
       can: "Can buy or renew policy from the linked provider and view only their own records.",
       cannot: "Cannot moderate accounts, change provider rules, or operate system queues."
     },
     {
       icon: ShieldCheck,
       title: "Insurer / Provider dashboard",
-      text: "Providers configure underwriting posture, simulate pricing, and inspect only their linked workers, issued policies, and provider-tagged claims.",
+      text: "Providers configure underwriting posture, preview pricing, and inspect only their linked workers, issued policies, and provider-tagged claims.",
       can: "Can manage provider configuration and provider-owned portfolio visibility.",
       cannot: "Cannot see another provider's workers or perform admin moderation."
     },

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, Mail, RefreshCcw } from "lucide-react";
+import { Bell, Mail, RefreshCcw, Trash2 } from "lucide-react";
 import { AppShell } from "../../layouts/AppShell";
 import { GlassCard } from "../../components/GlassCard";
 import { useAuth } from "../../context/AuthContext";
@@ -22,6 +22,18 @@ export default function NotificationsPage() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function deleteNotification(notificationId) {
+    try {
+      await api(`/user/notifications/${notificationId}`, {
+        method: "DELETE",
+        token
+      });
+      await load();
+    } catch (err) {
+      setError(err.message || "Unable to delete notification");
     }
   }
 
@@ -89,7 +101,16 @@ export default function NotificationsPage() {
                     </div>
                   </div>
                 </div>
-                <div className="text-sm text-white/55">{new Date(item.createdAt).toLocaleString()}</div>
+                <div className="flex flex-col items-end gap-3 text-sm text-white/55">
+                  <div>{new Date(item.createdAt).toLocaleString()}</div>
+                  <button
+                    className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-xs uppercase tracking-[0.18em] text-white/70 transition hover:border-coral/30 hover:text-coral"
+                    onClick={() => deleteNotification(item._id)}
+                  >
+                    <Trash2 size={12} />
+                    Delete
+                  </button>
+                </div>
               </div>
             </GlassCard>
           ))}

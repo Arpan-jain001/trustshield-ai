@@ -48,7 +48,9 @@ export default function InsurerDashboard() {
   const [simulating, setSimulating] = useState(false);
   const [creatingProduct, setCreatingProduct] = useState(false);
   const [adjustingLiquidity, setAdjustingLiquidity] = useState(false);
+  const [toppingUpLiquidity, setToppingUpLiquidity] = useState(false);
   const [reviewingClaimId, setReviewingClaimId] = useState("");
+  const [escalatingClaimId, setEscalatingClaimId] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -128,6 +130,27 @@ export default function InsurerDashboard() {
     }
   }
 
+  async function loadRazorpayScript() {
+    if (window.Razorpay) return true;
+
+    const existing = document.getElementById("razorpay-checkout-script");
+    if (existing) {
+      return new Promise((resolve) => {
+        existing.addEventListener("load", () => resolve(true), { once: true });
+        existing.addEventListener("error", () => resolve(false), { once: true });
+      });
+    }
+
+    return new Promise((resolve) => {
+      const script = document.createElement("script");
+      script.id = "razorpay-checkout-script";
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  }
+
   async function createProduct() {
     setCreatingProduct(true);
     setMessage("");
@@ -168,6 +191,71 @@ export default function InsurerDashboard() {
   }
 
   async function adjustLiquidity() {
+    if (liquidityForm.entryType === "ADD") {
+      setToppingUpLiquidity(true);
+      setMessage("");
+      setError("");
+      try {
+        const orderResponse = await api("/provider/liquidity/top-up", {
+          method: "POST",
+          token,
+          body: {
+            amount: liquidityForm.amount,
+            note: liquidityForm.note || "Provider reserve top-up"
+          }
+        });
+
+        const scriptReady = await loadRazorpayScript();
+        if (!scriptReady || !orderResponse.enabled || !orderResponse.keyId || !window.Razorpay) {
+          throw new Error("Razorpay checkout is not available for provider top-up");
+        }
+
+        const handler = async (response) => {
+          try {
+            const verifyResponse = await api("/provider/liquidity/top-up/verify", {
+              method: "POST",
+              token,
+              body: {
+                amount: liquidityForm.amount,
+                note: liquidityForm.note,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature
+              }
+            });
+            setMessage(verifyResponse.message || "Provider reserve topped up successfully.");
+            setLiquidityForm((current) => ({ ...current, note: "" }));
+            await load();
+          } catch (err) {
+            setError(err.message || "Unable to verify provider top-up");
+          } finally {
+            setToppingUpLiquidity(false);
+          }
+        };
+
+        const options = {
+          key: orderResponse.keyId,
+          amount: Math.round(Number(liquidityForm.amount) * 100),
+          currency: orderResponse.currency || "INR",
+          name: "TrustShield AI",
+          description: "Provider reserve top-up",
+          order_id: orderResponse.orderId,
+          handler,
+          theme: { color: "#22d3ee" },
+          modal: {
+            ondismiss: () => setToppingUpLiquidity(false)
+          }
+        };
+
+        const razorpay = new window.Razorpay(options);
+        razorpay.open();
+      } catch (err) {
+        setError(err.message || "Unable to start Razorpay top-up");
+        setToppingUpLiquidity(false);
+      }
+      return;
+    }
+
     setAdjustingLiquidity(true);
     setMessage("");
     setError("");
@@ -210,6 +298,28 @@ export default function InsurerDashboard() {
     }
   }
 
+  async function escalateClaim(claimId) {
+    setEscalatingClaimId(claimId);
+    setMessage("");
+    setError("");
+    try {
+      const response = await api("/provider/claims/escalate", {
+        method: "POST",
+        token,
+        body: {
+          claimId,
+          notes: "Provider escalated this claim for admin review"
+        }
+      });
+      setMessage(response.message);
+      await load();
+    } catch (err) {
+      setError(err.message || "Unable to escalate claim to admin review");
+    } finally {
+      setEscalatingClaimId("");
+    }
+  }
+
   const mixData = useMemo(
     () => [
       { name: "Approved", value: data?.portfolio?.claimMix?.approved || 0 },
@@ -235,8 +345,33 @@ export default function InsurerDashboard() {
   const settledPayouts = (data?.claims || [])
     .filter((claim) => (claim.payout?.total || 0) > 0 || claim.payout?.transactionId)
     .slice(0, 8);
+  const premiumCredits = (data?.reserveEntries || []).filter((entry) => entry.entryType === "ADD");
+  const payoutSettlements = (data?.reserveEntries || []).filter((entry) => entry.entryType === "PAYOUT_SETTLED");
   const activeWorkers = workforce.filter((worker) => worker.status === "ACTIVE").length;
   const pendingWorkers = workforce.filter((worker) => worker.status === "PENDING_VERIFICATION").length;
+  const formatDecisionSource = (claim) => {
+    const source = claim?.decisionSource || "AUTO";
+    if (source === "ADMIN_REVIEW") {
+      return `Admin review${claim?.review?.reviewedBy?.name ? ` by ${claim.review.reviewedBy.name}` : ""}`;
+    }
+    if (source === "PROVIDER_REVIEW") {
+      return `Provider review${claim?.review?.reviewedBy?.name ? ` by ${claim.review.reviewedBy.name}` : ""}`;
+    }
+    if (source === "MANUAL") {
+      return `Manual request${claim?.review?.requestedBy?.name ? ` by ${claim.review.requestedBy.name}` : ""}`;
+    }
+    return "Automatic decision";
+  };
+
+  const getLifecycleLabel = (claim) => {
+    if (!claim) return "No claim";
+    if (claim.payout?.status === "WITHDRAWN") return "Approved and withdrawn";
+    if (claim.payout?.status === "SUCCESS") return "Completed payout";
+    if (claim.review?.status === "PENDING" || claim.decision === "NEEDS_REVIEW") return "Waiting manual review";
+    if (claim.decision === "REJECTED") return "Rejected";
+    if (claim.decision === "APPROVED") return claim.payout?.status === "PENDING" ? "Approved - settlement queued" : "Approved and settled";
+    return "Created";
+  };
 
   return (
     <AppShell>
@@ -328,8 +463,8 @@ export default function InsurerDashboard() {
             <div className="flex items-center gap-3">
               <BrainCircuit className="text-sand" />
               <div>
-                <p className="text-sm uppercase tracking-[0.24em] text-sand">Pricing sandbox</p>
-                <h2 className="mt-2 text-3xl font-bold">Simulate provider pricing</h2>
+                <p className="text-sm uppercase tracking-[0.24em] text-sand">Pricing studio</p>
+                <h2 className="mt-2 text-3xl font-bold">Preview provider pricing</h2>
               </div>
             </div>
             <div className="mt-6 grid gap-4">
@@ -343,11 +478,11 @@ export default function InsurerDashboard() {
                 <input className="field" type="number" placeholder="Claim count" value={simulationForm.claimCount} onChange={(e) => setSimulationForm((current) => ({ ...current, claimCount: Number(e.target.value) }))} />
                 <input className="field" type="number" placeholder="Hourly rate" value={simulationForm.hourlyRate} onChange={(e) => setSimulationForm((current) => ({ ...current, hourlyRate: Number(e.target.value) }))} />
               </div>
-              {simulating ? <Loader label="Running pricing simulation..." /> : <button className="rounded-full border border-white/15 px-5 py-3 font-semibold text-white transition hover:border-cyan/30 hover:text-cyan" onClick={runSimulation} disabled={!isApproved}>Run simulation</button>}
+              {simulating ? <Loader label="Calculating pricing..." /> : <button className="rounded-full border border-white/15 px-5 py-3 font-semibold text-white transition hover:border-cyan/30 hover:text-cyan" onClick={runSimulation} disabled={!isApproved}>Preview pricing</button>}
             </div>
             {simulation ? (
               <div className="mt-5 rounded-3xl bg-white/5 p-4">
-                <p className="font-semibold">{simulation.product?.name || "Provider pricing result"} for {simulation.location}</p>
+                <p className="font-semibold">{simulation.product?.name || "Provider pricing preview"} for {simulation.location}</p>
                 <p className="mt-2 text-sm text-white/68">Premium INR {simulation.pricingBreakdown.total} | Coverage {simulation.coverageHours} hrs | Risk {simulation.risk.score}</p>
                 <p className="mt-2 text-sm text-white/60">{simulation.risk.explanation}</p>
               </div>
@@ -358,6 +493,7 @@ export default function InsurerDashboard() {
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
           <GlassCard>
             <h2 className="text-2xl font-bold">Claim decision mix</h2>
+            <p className="mt-2 text-xs uppercase tracking-[0.2em] text-sand">Pending claims: {pendingClaims.length}</p>
             <div className="mt-5 h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -444,6 +580,10 @@ export default function InsurerDashboard() {
               <div className="rounded-3xl bg-white/5 p-4"><p className="text-sm text-white/50">Available</p><p className="mt-3 text-3xl font-bold text-mint">INR {data?.providerProfile?.availableLiquidity || 0}</p></div>
               <div className="rounded-3xl bg-white/5 p-4"><p className="text-sm text-white/50">Locked</p><p className="mt-3 text-3xl font-bold text-sand">INR {data?.providerProfile?.lockedLiquidity || 0}</p></div>
             </div>
+            <div className="mt-4 flex flex-wrap gap-2 text-xs uppercase tracking-[0.2em]">
+              <span className="rounded-full border border-cyan/20 bg-cyan/10 px-3 py-1 text-cyan">Premium credits: {premiumCredits.length}</span>
+              <span className="rounded-full border border-coral/20 bg-coral/10 px-3 py-1 text-coral">Payout settlements: {payoutSettlements.length}</span>
+            </div>
             <div className="mt-5 grid gap-4 md:grid-cols-[0.8fr_1fr_1.2fr]">
               <select className="field" value={liquidityForm.entryType} onChange={(e) => setLiquidityForm((current) => ({ ...current, entryType: e.target.value }))}>
                 <option value="ADD">Add</option>
@@ -453,7 +593,7 @@ export default function InsurerDashboard() {
               <input className="field" placeholder="Reason" value={liquidityForm.note} onChange={(e) => setLiquidityForm((current) => ({ ...current, note: e.target.value }))} />
             </div>
             <div className="mt-5">
-              {adjustingLiquidity ? <Loader label="Updating liquidity..." /> : <button className="rounded-full border border-white/15 px-5 py-3 font-semibold text-white transition hover:border-cyan/30 hover:text-cyan" onClick={adjustLiquidity} disabled={!isApproved}>Post liquidity action</button>}
+              {adjustingLiquidity || toppingUpLiquidity ? <Loader label={liquidityForm.entryType === "ADD" ? "Opening Razorpay top-up..." : "Updating liquidity..."} /> : <button className="rounded-full border border-white/15 px-5 py-3 font-semibold text-white transition hover:border-cyan/30 hover:text-cyan" onClick={adjustLiquidity} disabled={!isApproved}>Post liquidity action</button>}
             </div>
             <div className="mt-6 space-y-3">
               {(data?.reserveEntries || []).map((entry) => (
@@ -485,6 +625,9 @@ export default function InsurerDashboard() {
                     <span className="rounded-full bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-white/70">{claim.decision}</span>
                   </div>
                   <p className="mt-2 text-sm text-white/68">Payout INR {claim.payout?.total || 0} | Fraud {claim.fraud?.score || 0} | Risk {claim.aiRisk?.score || 0}</p>
+                  <p className="mt-2 text-xs uppercase tracking-[0.2em] text-white/50">Source: {formatDecisionSource(claim)}</p>
+                  <p className="mt-2 text-xs uppercase tracking-[0.2em] text-white/45">Payout source: {claim.payout?.payoutSource || "N/A"}</p>
+                  <p className="mt-2 text-xs uppercase tracking-[0.2em] text-white/45">Lifecycle: {getLifecycleLabel(claim)}</p>
                   {claim.payout?.transactionId ? (
                     <p className="mt-2 text-sm text-mint">
                       Txn {claim.payout.transactionId} | {claim.payout.gateway || "SIMULATOR"} | {claim.payout.processingSeconds || 0}s
@@ -497,6 +640,9 @@ export default function InsurerDashboard() {
                       <>
                         <button className="rounded-full bg-cyan px-4 py-2 text-sm font-semibold text-ink" onClick={() => reviewClaim(claim._id, "APPROVED")} disabled={!isApproved}>Approve</button>
                         <button className="rounded-full border border-white/15 px-4 py-2 text-sm text-white transition hover:border-coral/30 hover:text-coral" onClick={() => reviewClaim(claim._id, "REJECTED")} disabled={!isApproved}>Reject</button>
+                        <button className="rounded-full border border-sand/30 px-4 py-2 text-sm text-sand transition hover:bg-sand/10" onClick={() => escalateClaim(claim._id)} disabled={!isApproved || escalatingClaimId === claim._id}>
+                          {escalatingClaimId === claim._id ? "Escalating..." : "Escalate to admin"}
+                        </button>
                       </>
                     )}
                   </div>
@@ -539,9 +685,17 @@ export default function InsurerDashboard() {
                   <div key={claim._id} className="rounded-3xl bg-white/5 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <p className="font-semibold">{claim.user?.name || "Worker"} | {claim.triggerType}</p>
-                      <span className="rounded-full bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-white/70">{claim.payout?.status || claim.decision}</span>
+                      <span className="rounded-full bg-white/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-white/70">{claim.decision === "APPROVED" ? "APPROVED" : (claim.payout?.status || claim.decision)}</span>
                     </div>
                     <p className="mt-2 text-sm text-mint">INR {claim.payout?.total || 0} | Txn {claim.payout?.transactionId || "N/A"} | {claim.payout?.gateway || "SIMULATOR"}</p>
+                    <p className="mt-2 text-xs uppercase tracking-[0.2em] text-white/50">Source: {formatDecisionSource(claim)}</p>
+                    <p className="mt-2 text-xs uppercase tracking-[0.2em] text-white/45">Payout source: {claim.payout?.payoutSource || "N/A"}</p>
+                    <p className="mt-2 text-xs uppercase tracking-[0.2em] text-white/45">Lifecycle: {getLifecycleLabel(claim)}</p>
+                    {claim.decision === "APPROVED" && claim.payout?.status === "PENDING" ? (
+                      <p className="mt-2 rounded-2xl border border-sand/20 bg-sand/10 px-4 py-2 text-sm text-sand">
+                        Settlement has been approved and is being credited from provider liquidity. No worker action is required.
+                      </p>
+                    ) : null}
                     <p className="mt-2 text-sm text-white/60">Processed {claim.payout?.processedAt ? new Date(claim.payout.processedAt).toLocaleString() : "N/A"} | {claim.payout?.processingSeconds || 0}s</p>
                     <p className="mt-2 text-sm text-white/50">{claim.decisionReason || "No decision reason available"}</p>
                   </div>

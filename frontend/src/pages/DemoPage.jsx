@@ -28,7 +28,7 @@ const steps = [
   {
     icon: Bot,
     title: "5. AI decision support",
-    text: "Gemini-assisted reasoning and stored model artifacts enrich the final claim score with explainable decision context and chatbot-ready summaries."
+    text: "AI-assisted reasoning and stored model artifacts enrich the final claim score with explainable decision context and chatbot-ready summaries."
   },
   {
     icon: Wallet,

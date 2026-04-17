@@ -15,13 +15,19 @@ function fallbackRisk(payload) {
   const score = Math.max(10, Math.min(95, Math.round(base)));
   return {
     score,
-    explanation: `Risk is ${score}/100 based on weather exposure, location volatility, recent claims pattern, behavior consistency, network trust, device integrity, and cluster-level fraud pressure.`
+    explanation: `Risk is ${score}/100 based on weather exposure, location volatility, recent claims pattern, behavior consistency, network trust, device integrity, and cluster-level fraud pressure.`,
+    modelProvider: "FALLBACK",
+    degraded: true
   };
 }
 
 export async function generateRiskAssessment(payload) {
   if (!genAi || env.aiProvider !== "GEMINI") {
-    return fallbackRisk(payload);
+    return {
+      ...fallbackRisk(payload),
+      degraded: false,
+      modelProvider: "RULE_BASED"
+    };
   }
 
   const prompt = `
@@ -42,11 +48,17 @@ export async function generateRiskAssessment(payload) {
     const parsed = JSON.parse(text.replace(/```json|```/g, ""));
     return {
       score: Math.max(0, Math.min(100, Number(parsed.score) || 0)),
-      explanation: parsed.explanation || "AI explanation unavailable."
+      explanation: parsed.explanation || "AI explanation unavailable.",
+      modelProvider: "GEMINI",
+      degraded: false
     };
   } catch (error) {
     console.warn("Gemini risk fallback:", error.message);
-    return fallbackRisk(payload);
+    return {
+      ...fallbackRisk(payload),
+      degraded: true,
+      modelProvider: "FALLBACK"
+    };
   }
 }
 
