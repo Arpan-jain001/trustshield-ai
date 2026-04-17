@@ -2,7 +2,7 @@ import { frontendEnv } from "../config/env";
 
 const API_BASE = frontendEnv.apiBaseUrl;
 
-export async function api(path, { token, body, method = "GET" } = {}) {
+async function request(path, { token, body, method = "GET" } = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     method,
     headers: {
@@ -19,5 +19,13 @@ export async function api(path, { token, body, method = "GET" } = {}) {
     Object.assign(error, data, { httpStatus: response.status });
     throw error;
   }
+
   return data;
 }
+
+export const api = {
+  get: (path, options = {}) => request(path, { ...options, method: "GET" }),
+  post: (path, body, options = {}) => request(path, { ...options, body, method: "POST" }),
+  put: (path, body, options = {}) => request(path, { ...options, body, method: "PUT" }),
+  delete: (path, body, options = {}) => request(path, { ...options, body, method: "DELETE" })
+};

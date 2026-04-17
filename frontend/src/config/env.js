@@ -3,6 +3,10 @@ const fallbackApiBase = "/api";
 function resolveApiBaseUrl() {
   const configuredApiBase = (import.meta.env.VITE_API_BASE_URL || "").trim().replace(/\/$/, "");
 
+  if (configuredApiBase) {
+    return configuredApiBase;
+  }
+
   if (typeof window !== "undefined") {
     const hostname = window.location.hostname;
     const isLocalHost = hostname === "localhost" || hostname === "127.0.0.1" || hostname.endsWith(".local");
@@ -12,7 +16,7 @@ function resolveApiBaseUrl() {
     }
   }
 
-  return configuredApiBase || fallbackApiBase;
+  return fallbackApiBase;
 }
 
 export const frontendEnv = {
