@@ -213,7 +213,7 @@ Risk Score = Location + Device + Behavior + Network + Cluster Risk
 
 ## 📊 Pitch Deck
 
-👉 [View Pitch Deck](docs/TrustShield-AI-Final-Pitch-Deck.pdf)
+👉 [View Pitch Deck](https://drive.google.com/file/d/1trZ4Afv0vGAG3XGZIHl7eS1kx_uiurz3/view?usp=sharing)
 
 ## 🚀 Phase 3 Deliverables
 
