@@ -174,7 +174,17 @@ function drawCard(x, y, width, height, section) {
   doc.fillColor(brand.subtext).font('Helvetica').fontSize(10).text(section.subtitle, x + 18, y + 40, { width: width - 36, lineGap: 3 });
   let bulletY = y + 70;
   section.bullets.forEach((bullet) => {
-    doc.fillColor(brand.text).font('Helvetica').fontSize(11).text(`• ${bullet}`, x + 18, bulletY, { width: width - 36, lineGap: 4 });
+    const urlRegex = /https?:\/\/[^\s]+/g;
+    const urlMatch = bullet.match(urlRegex);
+    if (urlMatch) {
+      const url = urlMatch[0];
+      const parts = bullet.split(url);
+      doc.fillColor(brand.text).font('Helvetica').fontSize(11).text(`• ${parts[0]}`, x + 18, bulletY, { width: width - 36, continued: true });
+      doc.fillColor('#3b82f6').text(url, { continued: true, link: url });
+      doc.fillColor(brand.text).text(parts[1] || '');
+    } else {
+      doc.fillColor(brand.text).font('Helvetica').fontSize(11).text(`• ${bullet}`, x + 18, bulletY, { width: width - 36, lineGap: 4 });
+    }
     bulletY += doc.heightOfString(`• ${bullet}`, { width: width - 36, lineGap: 4 }) + 6;
   });
   doc.restore();
@@ -193,7 +203,7 @@ function addPageSections(pageIndex) {
   if (sections[sectionIndex + 1]) {
     drawCard(20, top + cardHeight + gapBetweenCards, cardWidth, cardHeight, sections[sectionIndex + 1]);
   }
-  doc.fillColor(brand.subtext).font('Helvetica').fontSize(8).text(`Page ${pageIndex + 1} of ${Math.ceil(sections.length / 2)}`, 20, doc.page.height - 14, { align: 'center', width: doc.page.width - 40 });
+  doc.fillColor(brand.subtext).font('Helvetica').fontSize(7).text(`Page ${pageIndex + 1} of ${Math.ceil(sections.length / 2)} | Visit: https://trustshield-ai-frontend.vercel.app/`, 20, doc.page.height - 14, { align: 'center', width: doc.page.width - 40, link: 'https://trustshield-ai-frontend.vercel.app/' });
 }
 
 const pages = Math.ceil(sections.length / 2);
