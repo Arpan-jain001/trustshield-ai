@@ -147,7 +147,7 @@ addFooter();
 nextPage('Thank You', 'Ready for Guidewire DEVTrails 2026');
 doc.font('Helvetica').fontSize(12).fillColor(brand.text).text('TrustShield AI is positioned to deliver fast, explainable, and fraud-aware weekly income protection for India’s gig delivery workforce.', { lineGap: 4 });
 doc.moveDown(1);
-doc.font('Helvetica-Bold').fontSize(12).fillColor(brand.accent).text('Contact: info@trustshield.ai');
+doc.font('Helvetica-Bold').fontSize(12).fillColor(brand.accent).text('Contact: arpanjain00123@gmail.com');
 addFooter();
 
 doc.end();
