@@ -1,5 +1,7 @@
 #  TrustShield AI – Adversarially Resilient Parametric Insurance
 
+![Status](https://img.shields.io/badge/status-active-success) ![License](https://img.shields.io/badge/license-MIT-blue)
+
 ## 🧠 Overview
 
 TrustShield AI is a next-generation parametric insurance platform designed for gig workers, enabling **instant, automated payouts during extreme environmental conditions**.
@@ -7,6 +9,16 @@ TrustShield AI is a next-generation parametric insurance platform designed for g
 ⚡ Designed to operate under real-world adversarial attacks where traditional GPS-based systems fail.
 
 Unlike traditional systems, TrustShield AI follows a **zero-trust, adversarial-first architecture**, ensuring resilience against sophisticated fraud attacks such as GPS spoofing and coordinated claim manipulation.
+
+## 📁 Folder Structure
+
+* `client/` - mobile SDK and client packages
+* `frontend/` - React web app and UI
+* `server/` - backend API, services, and models
+* `docs/` - architecture, submission notes, and pitch deck assets
+* `packages/` - reusable libraries and SDKs
+
+**Live frontend:** https://trustshield-ai-frontend.vercel.app/
 
 ---
 
@@ -163,6 +175,60 @@ Risk Score = Location + Device + Behavior + Network + Cluster Risk
 
 * Machine Learning (Isolation Forest, LSTM)
 * Graph Algorithms (Louvain Clustering)
+
+## 🎥 Demo Video
+
+👉 [Watch Demo](https://docs.google.com/videos/d/1GwxiW2muhRkE2_4rlvMHfPnY7gVCtzMD9K3o23xG4Gs/play)
+
+---
+
+## 📊 Pitch Deck
+
+👉 [View Pitch Deck](docs/TrustShield-AI-Final-Pitch-Deck.pdf)
+
+## 📦 Source Code
+
+Complete source code for frontend, backend, and shared packages is available in this repository. Dependencies and local run instructions are provided in the README.
+
+## ⚙️ How to Run Locally
+
+### 1️⃣ Clone the Repository
+
+```bash
+git clone https://github.com/YOUR_USERNAME/trustshield-ai.git
+cd trustshield-ai
+```
+
+### 2️⃣ Install Dependencies
+
+```bash
+npm install
+```
+
+### 3️⃣ Setup Environment Variables
+
+Create a .env file in root:
+
+```env
+MONGO_URI=your_mongodb_connection
+JWT_SECRET=your_secret_key
+RAZORPAY_KEY_ID=your_key
+RAZORPAY_KEY_SECRET=your_secret
+```
+
+### 4️⃣ Run Backend
+
+```bash
+npm run server
+```
+
+### 5️⃣ Run Frontend
+
+```bash
+npm run dev
+```
+
+---
 
 ## Phase 3 Additions (Scale and Optimize)
 
