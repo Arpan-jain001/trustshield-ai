@@ -7,7 +7,7 @@ if (fs.existsSync(outputPath)) {
   fs.copyFileSync(outputPath, backupPath);
 }
 
-const doc = new PDFDocument({ margin: 40, size: 'A4' });
+const doc = new PDFDocument({ margin: 0, size: 'A4' });
 const stream = fs.createWriteStream(outputPath);
 doc.pipe(stream);
 
@@ -160,10 +160,10 @@ function drawBackground() {
 }
 
 function drawHeader() {
-  doc.fillColor(brand.text).font('Helvetica-Bold').fontSize(16).text('Guidewire DEVTrails 2026 | Phase 3 Final Pitch', 50, 45, { width: doc.page.width - 100, align: 'left' });
-  doc.fillColor(brand.accent).fontSize(10).text('TrustShield AI', 50, 68);
-  doc.fillColor(brand.subtext).font('Helvetica').fontSize(9).text('Advanced parametric income protection for gig delivery workers', 50, 82);
-  doc.strokeColor(brand.border).lineWidth(0.5).moveTo(50, 102).lineTo(doc.page.width - 50, 102).stroke();
+  doc.fillColor(brand.text).font('Helvetica-Bold').fontSize(16).text('Guidewire DEVTrails 2026 | Phase 3 Final Pitch', 20, 18, { width: doc.page.width - 40, align: 'left' });
+  doc.fillColor(brand.accent).fontSize(10).text('TrustShield AI', 20, 38);
+  doc.fillColor(brand.subtext).font('Helvetica').fontSize(9).text('Advanced parametric income protection for gig delivery workers', 20, 50);
+  doc.strokeColor(brand.border).lineWidth(0.5).moveTo(20, 65).lineTo(doc.page.width - 20, 65).stroke();
 }
 
 function drawCard(x, y, width, height, section) {
@@ -181,17 +181,19 @@ function drawCard(x, y, width, height, section) {
 }
 
 function addPageSections(pageIndex) {
-  const top = 110;
-  const footerReserve = 36;
-  const gapBetweenCards = 12;
-  const cardHeight = (doc.page.height - top - footerReserve - gapBetweenCards - 40) / 2;
-  const cardWidth = doc.page.width - 100;
+  const headerHeight = 75;
+  const footerHeight = 20;
+  const gapBetweenCards = 8;
+  const top = headerHeight;
+  const usableHeight = doc.page.height - headerHeight - footerHeight;
+  const cardHeight = (usableHeight - gapBetweenCards) / 2;
+  const cardWidth = doc.page.width - 40;
   const sectionIndex = pageIndex * 2;
-  drawCard(50, top, cardWidth, cardHeight, sections[sectionIndex]);
+  drawCard(20, top, cardWidth, cardHeight, sections[sectionIndex]);
   if (sections[sectionIndex + 1]) {
-    drawCard(50, top + cardHeight + gapBetweenCards, cardWidth, cardHeight, sections[sectionIndex + 1]);
+    drawCard(20, top + cardHeight + gapBetweenCards, cardWidth, cardHeight, sections[sectionIndex + 1]);
   }
-  doc.fillColor(brand.subtext).font('Helvetica').fontSize(9).text(`Page ${pageIndex + 1} of ${Math.ceil(sections.length / 2)}`, 50, doc.page.height - footerReserve, { align: 'center', width: doc.page.width - 100 });
+  doc.fillColor(brand.subtext).font('Helvetica').fontSize(8).text(`Page ${pageIndex + 1} of ${Math.ceil(sections.length / 2)}`, 20, doc.page.height - 14, { align: 'center', width: doc.page.width - 40 });
 }
 
 const pages = Math.ceil(sections.length / 2);
