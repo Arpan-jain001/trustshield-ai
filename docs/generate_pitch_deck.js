@@ -181,15 +181,17 @@ function drawCard(x, y, width, height, section) {
 }
 
 function addPageSections(pageIndex) {
-  const top = 120;
-  const cardHeight = (doc.page.height - top - 60 - 20) / 2;
+  const top = 110;
+  const footerReserve = 36;
+  const gapBetweenCards = 12;
+  const cardHeight = (doc.page.height - top - footerReserve - gapBetweenCards - 40) / 2;
   const cardWidth = doc.page.width - 100;
   const sectionIndex = pageIndex * 2;
   drawCard(50, top, cardWidth, cardHeight, sections[sectionIndex]);
   if (sections[sectionIndex + 1]) {
-    drawCard(50, top + cardHeight + 20, cardWidth, cardHeight, sections[sectionIndex + 1]);
+    drawCard(50, top + cardHeight + gapBetweenCards, cardWidth, cardHeight, sections[sectionIndex + 1]);
   }
-  doc.fillColor(brand.subtext).font('Helvetica').fontSize(9).text(`Page ${pageIndex + 1} of ${Math.ceil(sections.length / 2)}`, 50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100 });
+  doc.fillColor(brand.subtext).font('Helvetica').fontSize(9).text(`Page ${pageIndex + 1} of ${Math.ceil(sections.length / 2)}`, 50, doc.page.height - footerReserve, { align: 'center', width: doc.page.width - 100 });
 }
 
 const pages = Math.ceil(sections.length / 2);
