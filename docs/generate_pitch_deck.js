@@ -7,148 +7,198 @@ if (fs.existsSync(outputPath)) {
   fs.copyFileSync(outputPath, backupPath);
 }
 
-const doc = new PDFDocument({ margin: 50, size: 'A4' });
+const doc = new PDFDocument({ margin: 40, size: 'A4' });
 const stream = fs.createWriteStream(outputPath);
 doc.pipe(stream);
 
 const brand = {
-  primary: '#1f2937',
-  accent: '#2563eb',
-  text: '#111827',
-  gray: '#6b7280'
+  background: '#07111d',
+  card: '#11243f',
+  accent: '#22c55e',
+  accentSoft: '#2563eb',
+  text: '#f8fafc',
+  subtext: '#cbd5e1',
+  border: '#334155'
 };
 
-function drawPageFrame(title, subtitle) {
-  doc.fillColor(brand.primary).rect(0, 0, doc.page.width, 100).fill();
-  doc.fillColor('white').font('Helvetica-Bold').fontSize(18).text('Guidewire DEVTrails 2026', 50, 28);
-  doc.fontSize(14).fillColor('white').text(title, 50, 52);
-  if (subtitle) {
-    doc.font('Helvetica').fontSize(10).fillColor('white').text(subtitle, 50, 74);
+const sections = [
+  {
+    title: 'TrustShield AI',
+    subtitle: 'AI-powered weekly parametric income protection for gig delivery workers',
+    bullets: [
+      'Coverage scope: loss of income only due to weather, pollution, and curfew disruptions.',
+      'Excludes health, life, accident, and vehicle repair by design.',
+      'Built for adversarial environments with explainable AI and fraud controls.'
+    ]
+  },
+  {
+    title: 'Problem and Persona',
+    subtitle: 'Delivery workers lose income during uncontrollable disruptions',
+    bullets: [
+      'Target persona: platform-based food, grocery and e-commerce delivery workers.',
+      'Workers lose 20-30% weekly income during weather and curfew disruptions.',
+      'Existing safety nets are weak, manual and vulnerable to delayed or false claims.'
+    ]
+  },
+  {
+    title: 'Our Solution',
+    subtitle: 'Weekly micro-insurance with AI decisioning and automated routing',
+    bullets: [
+      'Role-based experiences for Worker, Insurer/Provider, Platform Ops and Admin.',
+      'Provider-linked data isolation ensures portfolio boundaries and governance.',
+      'Real-time disruption evidence drives claim simulation and approvals.'
+    ]
+  },
+  {
+    title: 'How It Works',
+    subtitle: 'Signup to payout in one trust pipeline',
+    bullets: [
+      'Worker registers, selects provider, verifies email, and activates coverage.',
+      'Weekly policy purchase and telemetry-backed claim trigger submission.',
+      'AI + fraud + anomaly + graph signals produce APPROVED / NEEDS_REVIEW / REJECTED.'
+    ]
+  },
+  {
+    title: 'AI + Fraud Architecture',
+    subtitle: 'Explainable risk scoring for trustworthy decisions',
+    bullets: [
+      'Composite risk = location + device + behavior + network + cluster risk.',
+      'Fraud stack uses GPS inconsistency, weather mismatch, repeat claims, linked accounts.',
+      'Graph intelligence detects synchronized claim pressure and ring-like fraud patterns.'
+    ]
+  },
+  {
+    title: 'Phase 3: Advanced Fraud Detection',
+    subtitle: 'Delivery-focused practical fraud defenses',
+    bullets: [
+      'GPS spoof pressure: speed jumps, confidence mismatch and route anomalies.',
+      'Weather claim checks: cross-validation with live disruption and AQI signals.',
+      'Mass pattern detection: synchronized claims trigger elevated review pressure.'
+    ]
+  },
+  {
+    title: 'Phase 3: Instant Payout Simulation',
+    subtitle: 'Gateway-grade trace and SLA visibility',
+    bullets: [
+      'Approved claims carry payout status, gateway, transaction ID, timestamp and processing seconds.',
+      'Gateway modes: RAZORPAY_TEST, STRIPE_SANDBOX, UPI simulator fallback.',
+      'UI highlights under-30-second payout SLA for judge-visible impact.'
+    ]
+  },
+  {
+    title: 'Intelligent Dashboards',
+    subtitle: 'Trust and control for workers, insurers, and ops',
+    bullets: [
+      'Worker dashboard: protected earnings, claims history, payout trace, coverage signals.',
+      'Insurer dashboard: loss ratio, disruption risk band, fraud pressure, payout SLA.',
+      'Ops/Admin dashboards: queue controls, governance, and review workflows.'
+    ]
+  },
+  {
+    title: 'Pricing & Sustainability',
+    subtitle: 'Weekly pricing built for gig cash flow',
+    bullets: [
+      'Premiums calculated weekly with dynamic risk modifiers and provider controls.',
+      'Loss ratio tracking improves underwriting and reserve posture decisions.',
+      'Provider liquidity and payout ledger keep sustainability visible.'
+    ]
+  },
+  {
+    title: 'Business Viability',
+    subtitle: 'B2B2C-ready model with monetization levers',
+    bullets: [
+      'Providers publish policy products and underwrite linked worker cohorts.',
+      'Platform earns distribution and risk-management value through trust automation.',
+      'Data isolation and governance controls improve enterprise adoption confidence.'
+    ]
+  },
+  {
+    title: 'Scale & Defensibility',
+    subtitle: 'Built for cities, providers and disruption patterns',
+    bullets: [
+      'Queue-based processing for ingestion, model jobs, replay and retries.',
+      'Feature snapshots and model artifacts support continuous learning loops.',
+      'Modular API design supports future real gateway and integration readiness.'
+    ]
+  },
+  {
+    title: 'Why TrustShield AI Wins',
+    subtitle: 'Phase 3 delivers clear value for judges',
+    bullets: [
+      'Strong phase coverage: ideation, automation and scale optimization complete.',
+      'Clear demo story: disruption trigger → AI decision → instant payout simulation.',
+      'Balanced worker trust, insurer control, and platform resilience in one stack.'
+    ]
+  },
+  {
+    title: 'Submission Links',
+    subtitle: 'Project and demo references',
+    bullets: [
+      'GitHub: https://github.com/Arpan-jain001/trustshield-ai',
+      'Demo video: https://docs.google.com/videos/d/1GwxiW2muhRkE2_4rlvMHfPnY7gVCtzMD9K3o23xG4Gs/play',
+      'Live frontend: https://trustshield-ai-frontend.vercel.app/'
+    ]
+  },
+  {
+    title: 'Thank You',
+    subtitle: 'Ready for Guidewire DEVTrails 2026',
+    bullets: [
+      'TrustShield AI delivers explainable, fraud-aware weekly income protection for India’s gig delivery workforce.',
+      'Contact: arpanjain00123@gmail.com'
+    ]
   }
-  doc.moveDown(4);
+];
+
+function drawBackground() {
+  doc.save();
+  doc.rect(0, 0, doc.page.width, doc.page.height).fill(brand.background);
+  doc.fillOpacity(0.18).fill(brand.accentSoft).circle(90, 100, 80).fill();
+  doc.fillOpacity(0.2).fill(brand.accent).circle(doc.page.width - 120, 140, 110).fill();
+  doc.fillOpacity(0.14).fill(brand.border).circle(100, doc.page.height - 120, 70).fill();
+  doc.fillOpacity(0.16).fill(brand.accentSoft).circle(doc.page.width - 80, doc.page.height - 100, 90).fill();
+  doc.restore();
 }
 
-function addSectionHeader(text) {
-  doc.moveDown(0.5);
-  doc.font('Helvetica-Bold').fontSize(18).fillColor(brand.primary).text(text);
-  doc.moveDown(0.5);
+function drawHeader() {
+  doc.fillColor(brand.text).font('Helvetica-Bold').fontSize(16).text('Guidewire DEVTrails 2026 | Phase 3 Final Pitch', 50, 45, { width: doc.page.width - 100, align: 'left' });
+  doc.fillColor(brand.accent).fontSize(10).text('TrustShield AI', 50, 68);
+  doc.fillColor(brand.subtext).font('Helvetica').fontSize(9).text('Advanced parametric income protection for gig delivery workers', 50, 82);
+  doc.strokeColor(brand.border).lineWidth(0.5).moveTo(50, 102).lineTo(doc.page.width - 50, 102).stroke();
 }
 
-function addBullet(text) {
-  doc.fillColor(brand.text).font('Helvetica').fontSize(12).text(`• ${text}`, { indent: 18, lineGap: 4 });
+function drawCard(x, y, width, height, section) {
+  doc.save();
+  doc.roundedRect(x, y, width, height, 12).fill(brand.card);
+  doc.strokeColor(brand.border).lineWidth(0.8).roundedRect(x, y, width, height, 12).stroke();
+  doc.fillColor(brand.accent).font('Helvetica-Bold').fontSize(14).text(section.title, x + 18, y + 18, { width: width - 36 });
+  doc.fillColor(brand.subtext).font('Helvetica').fontSize(10).text(section.subtitle, x + 18, y + 40, { width: width - 36, lineGap: 3 });
+  let bulletY = y + 70;
+  section.bullets.forEach((bullet) => {
+    doc.fillColor(brand.text).font('Helvetica').fontSize(11).text(`• ${bullet}`, x + 18, bulletY, { width: width - 36, lineGap: 4 });
+    bulletY += doc.heightOfString(`• ${bullet}`, { width: width - 36, lineGap: 4 }) + 6;
+  });
+  doc.restore();
 }
 
-function addNote(text) {
-  doc.fillColor(brand.gray).font('Helvetica').fontSize(11).text(text, { indent: 18, lineGap: 4 });
-}
-
-function addFooter() {
-  const pageNumber = doc.page.number;
-  doc.font('Helvetica').fontSize(9).fillColor(brand.gray).text(`Page ${pageNumber}`, 50, doc.page.height - 50, { align: 'center', width: doc.page.width - 100 });
-}
-
-function nextPage(title, subtitle) {
-  if (doc.page.number > 0) {
-    doc.addPage();
+function addPageSections(pageIndex) {
+  const top = 120;
+  const cardHeight = (doc.page.height - top - 60 - 20) / 2;
+  const cardWidth = doc.page.width - 100;
+  const sectionIndex = pageIndex * 2;
+  drawCard(50, top, cardWidth, cardHeight, sections[sectionIndex]);
+  if (sections[sectionIndex + 1]) {
+    drawCard(50, top + cardHeight + 20, cardWidth, cardHeight, sections[sectionIndex + 1]);
   }
-  drawPageFrame(title, subtitle);
+  doc.fillColor(brand.subtext).font('Helvetica').fontSize(9).text(`Page ${pageIndex + 1} of ${Math.ceil(sections.length / 2)}`, 50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100 });
 }
 
-nextPage('TrustShield AI', 'AI-powered weekly parametric income protection for gig delivery workers');
-doc.font('Helvetica-Bold').fontSize(20).fillColor(brand.accent).text('Phase 3 Final Pitch', { align: 'center' });
-doc.moveDown(1);
-doc.font('Helvetica').fontSize(12).fillColor(brand.text).text('A secure, explainable, and fraud-aware parametric protection system designed for delivery workers in adversarial environments.');
-doc.moveDown(1);
-addSectionHeader('Why it matters');
-addBullet('Protects weekly income for delivery workers during weather, pollution, and curfew disruptions.');
-addBullet('Excludes health, life, accident, and vehicle repair to keep coverage focused and sustainable.');
-addBullet('Built to operate in adversarial conditions with robust fraud controls.');
-addFooter();
-
-nextPage('Problem and Persona', 'Real income loss for platform-based delivery workers');
-addBullet('Delivery workers lose 20-30% income during uncontrollable external disruptions.');
-addBullet('Target persona: food, grocery, and e-commerce delivery workers.');
-addBullet('Workers need a weekly protection model aligned with their earnings cycles.');
-addBullet('Current safety nets are weak, manual, and vulnerable to false or delayed claims.');
-addFooter();
-
-nextPage('Our Solution', 'AI-first weekly micro-insurance with operational trust');
-addBullet('Weekly policy model with real-time claim triggers and automated decisioning.');
-addBullet('Role-based surfaces for Worker, Insurer/Provider, Platform Ops, and Admin.');
-addBullet('Provider-linked data isolation secures insurer portfolios and governance boundaries.');
-addBullet('Disruption evidence is validated using telematics, weather, AQI, and fraud signals.');
-addFooter();
-
-nextPage('How It Works', 'Seamless flow from signup to payout');
-addBullet('Worker signs up, selects a provider, verifies identity/email, and activates coverage.');
-addBullet('Worker purchases a weekly policy and submits a telemetry-backed claim trigger.');
-addBullet('AI + fraud + anomaly + graph signals produce APPROVED, NEEDS_REVIEW, or REJECTED decisions.');
-addFooter();
-
-nextPage('AI + Fraud Architecture', 'Explainable scoring for trust and transparency');
-addBullet('Composite risk score = location + device + behavior + network + cluster risk.');
-addBullet('Fraud score stack includes GPS inconsistency, weather mismatch, repeat claims, and linked accounts.');
-addBullet('Graph intelligence identifies synchronized claim pressure and ring-like behavior.');
-addFooter();
-
-nextPage('Phase 3: Advanced Fraud Detection', 'Delivery-focused practical fraud defenses');
-addBullet('GPS spoof pressure: unrealistic speed jumps, confidence mismatch, and route anomalies.');
-addBullet('Fake weather claim checks: cross-validated disruption signals with real-time data.');
-addBullet('Mass pattern detection: synchronized claims and ring-like account behavior trigger review pressure.');
-addFooter();
-
-nextPage('Phase 3: Instant Payout Simulation', 'Gateway-grade trace and SLA visibility');
-addBullet('Approved claims include payout status, gateway, transaction ID, timestamp, and processing seconds.');
-addBullet('Gateway modes supported: RAZORPAY_TEST, STRIPE_SANDBOX, and UPI simulator fallback.');
-addBullet('UI highlights under-30-second payout SLA for judge-visible impact.');
-addFooter();
-
-nextPage('Intelligent Dashboards', 'Trust and control for workers, insurers, and ops');
-addBullet('Worker dashboard: protected earnings, claims history, payout trace, and coverage signals.');
-addBullet('Insurer dashboard: loss ratio, disruption risk band, fraud pressure, and payout SLA.');
-addBullet('Ops/Admin dashboards provide queue controls, governance actions, and review workflows.');
-addFooter();
-
-nextPage('Pricing & Sustainability', 'Weekly pricing built for gig cash flow');
-addBullet('Premiums are calculated weekly with dynamic risk modifiers and provider controls.');
-addBullet('Loss ratio tracking improves underwriting and reserve posture decisions.');
-addBullet('Provider liquidity and payout ledger keep sustainability visible.');
-addFooter();
-
-nextPage('Business Viability', 'B2B2C-ready model with enterprise confidence');
-addBullet('Providers publish policy products and underwrite linked worker cohorts.');
-addBullet('Platform earns distribution and risk-management value through trust automation.');
-addBullet('Data isolation and governance controls improve enterprise adoption confidence.');
-addFooter();
-
-nextPage('Scale & Defensibility', 'Built for cities, providers, and disruption patterns');
-addBullet('Queue-based processing for ingestion, model jobs, replay, and retries.');
-addBullet('Feature snapshots and model artifacts support continuous learning loops.');
-addBullet('Modular API design supports future real gateway and platform integrations.');
-addFooter();
-
-nextPage('Why TrustShield AI Wins', 'Clear phase 3 value for the judge panel');
-addBullet('Strong phase coverage from ideation to automation and scale optimization.');
-addBullet('Clear demo story: disruption trigger → AI decision → instant payout simulation.');
-addBullet('Balanced approach across worker trust, insurer control, and platform resilience.');
-addFooter();
-
-nextPage('Submission Link Summary', null);
-doc.font('Helvetica-Bold').fontSize(14).fillColor(brand.primary).text('GitHub Repository', { continued: false });
-doc.font('Helvetica').fillColor(brand.text).text('https://github.com/Arpan-jain001/trustshield-ai');
-doc.moveDown(0.5);
-doc.font('Helvetica-Bold').fillColor(brand.primary).text('Demo Video');
-doc.font('Helvetica').fillColor(brand.text).text('https://docs.google.com/videos/d/1GwxiW2muhRkE2_4rlvMHfPnY7gVCtzMD9K3o23xG4Gs/play');
-doc.moveDown(0.5);
-doc.font('Helvetica-Bold').fillColor(brand.primary).text('Live Frontend');
-doc.font('Helvetica').fillColor(brand.text).text('https://trustshield-ai-frontend.vercel.app/');
-addFooter();
-
-nextPage('Thank You', 'Ready for Guidewire DEVTrails 2026');
-doc.font('Helvetica').fontSize(12).fillColor(brand.text).text('TrustShield AI is positioned to deliver fast, explainable, and fraud-aware weekly income protection for India’s gig delivery workforce.', { lineGap: 4 });
-doc.moveDown(1);
-doc.font('Helvetica-Bold').fontSize(12).fillColor(brand.accent).text('Contact: arpanjain00123@gmail.com');
-addFooter();
+const pages = Math.ceil(sections.length / 2);
+for (let pageIndex = 0; pageIndex < pages; pageIndex += 1) {
+  if (pageIndex > 0) doc.addPage();
+  drawBackground();
+  drawHeader();
+  addPageSections(pageIndex);
+}
 
 doc.end();
 stream.on('finish', () => {
