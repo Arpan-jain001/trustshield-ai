@@ -215,6 +215,53 @@ Risk Score = Location + Device + Behavior + Network + Cluster Risk
 
 👉 [View Pitch Deck](https://drive.google.com/file/d/1trZ4Afv0vGAG3XGZIHl7eS1kx_uiurz3/view?usp=sharing)
 
+---
+
+## 📸 Screenshots
+
+Explore key flows across Worker, Admin, and Insurer roles:
+
+### 🛡️ Zero-Trust Protection Engine (System Initialization)
+![Hero](docs/screenshot/hero.png)
+
+### 🚀 Product Landing (Overview & Value Proposition)
+![Landing](docs/screenshot/landing.png)
+
+### 🔐 Secure Authentication & Role-Based Access
+![Login](docs/screenshot/login.png)
+
+---
+
+### 🧠 Admin Control Center (Fraud Monitoring & Verification)
+![Admin Dashboard](docs/screenshot/admin.png)
+
+### 🧾 Admin Review & Moderation Panel
+![Admin Review](docs/screenshot/adminreview.png)
+
+### 📊 Fraud Detection & Analytics Engine
+![Analytics](docs/screenshot/analytics.png)
+
+---
+
+### 👷 Worker Dashboard (Policy & Claim Interface)
+![Worker Dashboard](docs/screenshot/workerdashboard.png)
+
+### 📥 Worker Claim Submission Flow
+![Worker Claim](docs/screenshot/workerclaim.png)
+
+### 🛒 Buy Worker Policy (Onboarding Flow)
+![Buy Policy](docs/screenshot/buyworkerpolicy.png)
+
+---
+
+### 🏢 Insurer Dashboard (Risk & Policy Oversight)
+![Insurer Dashboard](docs/screenshot/insurerdashboard.png)
+
+### ⚖️ Insurer Claim Decision Engine
+![Insurer Decision](docs/screenshot/insurerclaimdecision.png)
+
+---
+
 ## 🚀 Phase 3 Deliverables
 
 * GitHub repository access is available at: https://github.com/Arpan-jain001/trustshield-ai
@@ -231,6 +278,18 @@ Complete source code for frontend, backend, and shared packages is available in 
 * Backend deployment: Render
 * Frontend deployment: Vercel - https://trustshield-ai-frontend.vercel.app/
 * `.env.example` is included at the repository root and `frontend/.env.example` is included for frontend config
+
+## ⚡ Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/Arpan-jain001/trustshield-ai.git
+cd trustshield-ai
+
+# Install dependencies & run
+npm install
+npm run dev  # Runs both frontend & backend (requires concurrently)
+```
 
 ## ⚙️ How to Run Locally
 
@@ -284,20 +343,19 @@ VITE_SUPPORT_EMAIL=support@example.com
 VITE_SITE_URL=http://localhost:5173
 ```
 
-### 4️⃣ Run Backend
+### 4️⃣ Run Services
 
+**Backend only:**
 ```bash
 npm run server
 ```
 
-### 5️⃣ Run Frontend
-
+**Frontend only:**
 ```bash
 npm run frontend
 ```
 
-### 6️⃣ Run Both Locally
-
+**Both together:**
 ```bash
 npm run dev
 ```
