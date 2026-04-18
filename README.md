@@ -176,6 +176,35 @@ Risk Score = Location + Device + Behavior + Network + Cluster Risk
 * Machine Learning (Isolation Forest, LSTM)
 * Graph Algorithms (Louvain Clustering)
 
+## 🧩 Dependencies
+
+### Frontend
+* React 18
+* Vite
+* Tailwind CSS
+* React Router DOM
+* Recharts
+* React Three Fiber
+* Framer Motion
+* jsPDF
+* Razorpay SDK
+
+### Backend
+* Express 5
+* Mongoose
+* dotenv
+* bcryptjs
+* jsonwebtoken
+* cors
+* morgan
+* node-cron
+* Razorpay SDK
+* Google GenAI
+* Resend email SDK
+
+### Workspace tooling
+* concurrently
+
 ## 🎥 Demo Video
 
 👉 [Watch Demo](https://docs.google.com/videos/d/1GwxiW2muhRkE2_4rlvMHfPnY7gVCtzMD9K3o23xG4Gs/play)
@@ -186,16 +215,29 @@ Risk Score = Location + Device + Behavior + Network + Cluster Risk
 
 👉 [View Pitch Deck](docs/TrustShield-AI-Final-Pitch-Deck.pdf)
 
+## 🚀 Phase 3 Deliverables
+
+* GitHub repository access is available at: https://github.com/Arpan-jain001/trustshield-ai
+* Pitch deck is uploaded and linked under the `Pitch Deck` section
+* Recorded demo video is linked under the `Demo Video` section
+* Complete source code is available with dependencies and clear local run instructions
+* Backend is hosted on Render and frontend is hosted on Vercel
+
 ## 📦 Source Code
 
-Complete source code for frontend, backend, and shared packages is available in this repository. Dependencies and local run instructions are provided in the README.
+Complete source code for frontend, backend, and shared packages is available in this repository.
+
+* GitHub repository: https://github.com/Arpan-jain001/trustshield-ai
+* Backend deployment: Render
+* Frontend deployment: Vercel - https://trustshield-ai-frontend.vercel.app/
+* `.env.example` is included at the repository root and `frontend/.env.example` is included for frontend config
 
 ## ⚙️ How to Run Locally
 
 ### 1️⃣ Clone the Repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/trustshield-ai.git
+git clone https://github.com/Arpan-jain001/trustshield-ai.git
 cd trustshield-ai
 ```
 
@@ -207,13 +249,39 @@ npm install
 
 ### 3️⃣ Setup Environment Variables
 
-Create a .env file in root:
+Create a `.env` file in the repository root (`e:\trustshield-ai\.env`). Do not commit `.env` to GitHub.
+
+Create a `.env.example` file with placeholder values and commit that file instead.
+
+Create a `frontend/.env` file from `frontend/.env.example` for frontend-specific variables.
+
+Root backend `.env` example:
 
 ```env
-MONGO_URI=your_mongodb_connection
+MONGODB_URI=your_mongodb_connection
 JWT_SECRET=your_secret_key
+CLIENT_URL=http://localhost:5173
+EMAIL_FROM=no-reply@trustshield.ai
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=your_admin_password
+SUPPORT_EMAIL=support@example.com
+PAYMENT_GATEWAY=RAZORPAY_TEST
 RAZORPAY_KEY_ID=your_key
 RAZORPAY_KEY_SECRET=your_secret
+RESEND_API_KEY=your_resend_api_key
+OPENWEATHER_API_KEY=your_openweather_api_key
+IPGEOLOCATION_API_KEY=your_ipgeolocation_api_key
+AQI_API_KEY=your_aqi_api_key
+NODE_ENV=development
+PORT=5000
+```
+
+Frontend `.env.example` is available at `frontend/.env.example` and should include:
+
+```env
+VITE_API_BASE_URL=http://localhost:5000/api
+VITE_SUPPORT_EMAIL=support@example.com
+VITE_SITE_URL=http://localhost:5173
 ```
 
 ### 4️⃣ Run Backend
@@ -223,6 +291,12 @@ npm run server
 ```
 
 ### 5️⃣ Run Frontend
+
+```bash
+npm run frontend
+```
+
+### 6️⃣ Run Both Locally
 
 ```bash
 npm run dev
